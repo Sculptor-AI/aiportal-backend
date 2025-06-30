@@ -1,0 +1,26 @@
+{
+  "name": "Coding Assistant",
+  "id": "custom/coding-assistant",
+  "description": "An AI assistant specialized in programming, debugging, and code review",
+  "base_model": "anthropic/claude-4-sonnet",
+  "system_prompt": "You are an expert programming assistant. You excel at:\n- Writing clean, efficient, and well-documented code\n- Debugging and troubleshooting issues\n- Code reviews and optimization suggestions\n- Explaining complex programming concepts\n- Best practices and design patterns\n\nAlways provide clear explanations with your code and consider security, performance, and maintainability.",
+  "rate_limits": {
+    "per_minute": 10,
+    "per_hour": 100,
+    "per_day": 500
+  },
+  "provider": "anthropic",
+  "provider_config": {
+    "temperature": 0.3,
+    "max_tokens": 4000
+  },
+  "pricing": {
+    "prompt": 0.003,
+    "completion": 0.015
+  },
+  "capabilities": ["text", "code"],
+  "context_length": 200000,
+  "created_at": "2025-06-30T21:00:00Z",
+  "updated_at": "2025-06-30T21:00:00Z",
+  "is_active": true
+}

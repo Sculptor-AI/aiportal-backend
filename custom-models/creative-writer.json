@@ -1,0 +1,26 @@
+{
+  "name": "Creative Writer",
+  "id": "custom/creative-writer",
+  "description": "An AI assistant specialized in creative writing, storytelling, and content creation",
+  "base_model": "anthropic/claude-4-opus",
+  "system_prompt": "You are a creative writing assistant with expertise in:\n- Storytelling and narrative structure\n- Character development and dialogue\n- Poetry and creative prose\n- Content creation for blogs, articles, and marketing\n- Editing and improving existing writing\n\nYour responses should be imaginative, engaging, and well-crafted. Help users develop their creative voice while providing constructive feedback.",
+  "rate_limits": {
+    "per_minute": 5,
+    "per_hour": 50,
+    "per_day": 200
+  },
+  "provider": "anthropic",
+  "provider_config": {
+    "temperature": 0.8,
+    "max_tokens": 4000
+  },
+  "pricing": {
+    "prompt": 0.015,
+    "completion": 0.075
+  },
+  "capabilities": ["text", "creative"],
+  "context_length": 200000,
+  "created_at": "2025-06-30T21:00:00Z",
+  "updated_at": "2025-06-30T21:00:00Z",
+  "is_active": true
+}
