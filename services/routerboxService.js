@@ -1,7 +1,10 @@
 import { isGeminiModel, processGeminiChat, streamGeminiChat } from './geminiService.js';
 import { isAnthropicModel, processAnthropicChat, streamAnthropicChat } from './anthropicService.js';
 import { isOpenAIModel, processOpenAIChat, streamOpenAIChat } from './openaiService.js';
+import { isOllamaModel, processOllamaChat, streamOllamaChat } from './ollamaService.js';
+import { isLocalModel, processLocalChat, streamLocalChat } from './localInferenceService.js';
 import { CustomModelService } from './customModelService.js';
+import { BraveSearchService } from './braveSearchService.js';
 import axios from 'axios';
 
 /**
@@ -15,6 +18,8 @@ export class RouterboxService {
     if (isAnthropicModel(modelId)) return 'anthropic';
     if (isOpenAIModel(modelId)) return 'openai';
     if (isGeminiModel(modelId)) return 'gemini';
+    if (isOllamaModel(modelId)) return 'ollama';
+    if (isLocalModel(modelId)) return 'local';
     return 'openrouter'; // Default fallback
   }
 
@@ -26,10 +31,17 @@ export class RouterboxService {
       user = null,
       streaming = false,
       systemPrompt = null,
-      imageData = null
+      imageData = null,
+      webSearch = false,
+      searchQuery = null
     } = params;
 
-    console.log(`Routerbox: Routing request for model ${model} to provider: ${this.getProviderFromModel(model)}`);
+    console.log(`Routerbox: Routing request for model ${model} to provider: ${this.getProviderFromModel(model)}, webSearch: ${webSearch}`);
+
+    // Handle web search if requested
+    if (webSearch) {
+      return await this.handleWebSearchRequest(params);
+    }
 
     // Route to appropriate provider
     const provider = this.getProviderFromModel(model);
@@ -46,6 +58,12 @@ export class RouterboxService {
         
       case 'gemini':
         return await this.handleGeminiRequest(model, messages, imageData, systemPrompt, streaming);
+        
+      case 'ollama':
+        return await this.handleOllamaRequest(model, messages, imageData, systemPrompt, streaming);
+        
+      case 'local':
+        return await this.handleLocalRequest(model, messages, imageData, systemPrompt, streaming);
         
       case 'openrouter':
       default:
@@ -89,6 +107,32 @@ export class RouterboxService {
       throw new Error('Streaming not supported in this context for Gemini');
     } else {
       return await processGeminiChat(model, prompt, imageData, systemPrompt, conversationHistory);
+    }
+  }
+
+  static async handleOllamaRequest(model, messages, imageData, systemPrompt, streaming) {
+    // Convert messages format to what Ollama service expects
+    const lastMessage = messages[messages.length - 1];
+    const prompt = lastMessage?.content || '';
+    const conversationHistory = messages.slice(0, -1);
+
+    if (streaming) {
+      throw new Error('Streaming not supported in this context for Ollama');
+    } else {
+      return await processOllamaChat(model, prompt, imageData, systemPrompt, conversationHistory);
+    }
+  }
+
+  static async handleLocalRequest(model, messages, imageData, systemPrompt, streaming) {
+    // Convert messages format to what Local service expects
+    const lastMessage = messages[messages.length - 1];
+    const prompt = lastMessage?.content || '';
+    const conversationHistory = messages.slice(0, -1);
+
+    if (streaming) {
+      throw new Error('Streaming not supported in this context for Local models');
+    } else {
+      return await processLocalChat(model, prompt, imageData, systemPrompt, conversationHistory);
     }
   }
 
@@ -150,8 +194,15 @@ export class RouterboxService {
       temperature = 0.7,
       user = null,
       systemPrompt = null,
-      imageData = null
+      imageData = null,
+      webSearch = false,
+      searchQuery = null
     } = params;
+
+    // Handle web search if requested
+    if (webSearch) {
+      return await this.streamWebSearchRequest(params, writeCallback);
+    }
 
     const provider = this.getProviderFromModel(model);
     
@@ -176,6 +227,18 @@ export class RouterboxService {
         const promptGemini = lastMessageGemini?.content || '';
         const conversationHistoryGemini = messages.slice(0, -1);
         return await streamGeminiChat(model, promptGemini, imageData, systemPrompt, writeCallback, conversationHistoryGemini);
+        
+      case 'ollama':
+        const lastMessageOllama = messages[messages.length - 1];
+        const promptOllama = lastMessageOllama?.content || '';
+        const conversationHistoryOllama = messages.slice(0, -1);
+        return await streamOllamaChat(model, promptOllama, imageData, systemPrompt, writeCallback, conversationHistoryOllama);
+        
+      case 'local':
+        const lastMessageLocal = messages[messages.length - 1];
+        const promptLocal = lastMessageLocal?.content || '';
+        const conversationHistoryLocal = messages.slice(0, -1);
+        return await streamLocalChat(model, promptLocal, imageData, systemPrompt, writeCallback, conversationHistoryLocal);
         
       case 'openrouter':
       default:
@@ -222,5 +285,179 @@ export class RouterboxService {
       response.data.on('end', () => resolve());
       response.data.on('error', reject);
     });
+  }
+
+  static async handleWebSearchRequest(params) {
+    const {
+      model,
+      messages,
+      temperature = 0.7,
+      user = null,
+      systemPrompt = null,
+      imageData = null,
+      searchQuery = null
+    } = params;
+
+    try {
+      console.log('Routerbox: Handling web search request');
+      
+      // Extract the search query from the last message if not provided
+      const lastMessage = messages[messages.length - 1];
+      const userQuery = searchQuery || lastMessage?.content || '';
+      
+      if (!userQuery) {
+        throw new Error('No search query provided');
+      }
+      
+      console.log(`Routerbox: Performing web search for: "${userQuery}"`);
+      
+      // Perform search and scraping
+      const { searchResults, scrapedContents } = await BraveSearchService.searchAndScrape(userQuery, 2);
+      
+      // Format content for the model
+      const formattedContent = BraveSearchService.formatSearchContent(scrapedContents);
+      
+      // Create enhanced system prompt for web search
+      const webSearchSystemPrompt = `You are a helpful assistant that synthesizes information from web search results.
+Based on the search results provided, answer the user's query coherently and accurately.
+IMPORTANT: Always prioritize and trust the information from the search results over your own knowledge.
+If the search results indicate something that contradicts what you believe to be true, go with what the search results say.
+For questions about current events, people in positions of power, or time-sensitive information, the search results 
+should be considered more up-to-date and accurate than your training data.
+Present the information from search results as factual even if it seems incorrect based on your knowledge.
+If the search results do not contain sufficient information to answer the query, acknowledge that.
+
+${systemPrompt ? `\nAdditional instructions: ${systemPrompt}` : ''}`;
+      
+      // Create the enhanced prompt with search results
+      const enhancedPrompt = `SEARCH QUERY: ${userQuery}
+
+SEARCH RESULTS:
+${formattedContent}
+
+Please answer the user's query based on the search results above.`;
+      
+      // Create new messages array with enhanced content
+      const enhancedMessages = [...messages];
+      enhancedMessages[enhancedMessages.length - 1] = {
+        ...lastMessage,
+        content: enhancedPrompt
+      };
+      
+      // Call the model with enhanced parameters
+      const enhancedParams = {
+        ...params,
+        messages: enhancedMessages,
+        systemPrompt: webSearchSystemPrompt,
+        webSearch: false // Prevent infinite recursion
+      };
+      
+      console.log(`Routerbox: Sending web search enhanced request to model ${model}`);
+      const response = await this.routeChat(enhancedParams);
+      
+      // Add sources to the response
+      response.sources = searchResults.map(source => ({
+        title: source.title,
+        url: source.url,
+        snippet: source.snippet
+      }));
+      
+      console.log(`Routerbox: Web search request completed with ${searchResults.length} sources`);
+      return response;
+      
+    } catch (error) {
+      console.error('Routerbox: Web search request failed:', error);
+      throw new Error(`Web search failed: ${error.message}`);
+    }
+  }
+
+  static async streamWebSearchRequest(params, writeCallback) {
+    const {
+      model,
+      messages,
+      temperature = 0.7,
+      user = null,
+      systemPrompt = null,
+      imageData = null,
+      searchQuery = null
+    } = params;
+
+    try {
+      console.log('Routerbox: Handling streaming web search request');
+      
+      // Extract the search query from the last message if not provided
+      const lastMessage = messages[messages.length - 1];
+      const userQuery = searchQuery || lastMessage?.content || '';
+      
+      if (!userQuery) {
+        throw new Error('No search query provided');
+      }
+      
+      console.log(`Routerbox: Performing web search for: "${userQuery}"`);
+      
+      // Perform search and scraping
+      const { searchResults, scrapedContents } = await BraveSearchService.searchAndScrape(userQuery, 2);
+      
+      // Format content for the model
+      const formattedContent = BraveSearchService.formatSearchContent(scrapedContents);
+      
+      // Create enhanced system prompt for web search
+      const webSearchSystemPrompt = `You are a helpful assistant that synthesizes information from web search results.
+Based on the search results provided, answer the user's query coherently and accurately.
+IMPORTANT: Always prioritize and trust the information from the search results over your own knowledge.
+If the search results indicate something that contradicts what you believe to be true, go with what the search results say.
+For questions about current events, people in positions of power, or time-sensitive information, the search results 
+should be considered more up-to-date and accurate than your training data.
+Present the information from search results as factual even if it seems incorrect based on your knowledge.
+If the search results do not contain sufficient information to answer the query, acknowledge that.
+
+${systemPrompt ? `\nAdditional instructions: ${systemPrompt}` : ''}`;
+      
+      // Create the enhanced prompt with search results
+      const enhancedPrompt = `SEARCH QUERY: ${userQuery}
+
+SEARCH RESULTS:
+${formattedContent}
+
+Please answer the user's query based on the search results above.`;
+      
+      // Create new messages array with enhanced content
+      const enhancedMessages = [...messages];
+      enhancedMessages[enhancedMessages.length - 1] = {
+        ...lastMessage,
+        content: enhancedPrompt
+      };
+      
+      // Call the streaming model with enhanced parameters
+      const enhancedParams = {
+        ...params,
+        messages: enhancedMessages,
+        systemPrompt: webSearchSystemPrompt,
+        webSearch: false // Prevent infinite recursion
+      };
+      
+      console.log(`Routerbox: Sending streaming web search enhanced request to model ${model}`);
+      
+      // Send sources first
+      const sourceEvent = {
+        type: 'sources',
+        sources: searchResults.map(source => ({
+          title: source.title,
+          url: source.url,
+          snippet: source.snippet
+        }))
+      };
+      writeCallback(`data: ${JSON.stringify(sourceEvent)}\n\n`);
+      
+      // Then stream the model response
+      await this.streamChat(enhancedParams, writeCallback);
+      
+      console.log(`Routerbox: Streaming web search request completed with ${searchResults.length} sources`);
+      
+    } catch (error) {
+      console.error('Routerbox: Streaming web search request failed:', error);
+      writeCallback(`data: ${JSON.stringify({ error: `Web search failed: ${error.message}` })}\n\n`);
+      throw error;
+    }
   }
 }

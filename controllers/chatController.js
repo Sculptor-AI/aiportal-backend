@@ -3,6 +3,8 @@ import { formatResponsePacket } from '../utils/formatters.js';
 import { isGeminiModel, processGeminiChat, streamGeminiChat } from '../services/geminiService.js';
 import { isAnthropicModel, processAnthropicChat, streamAnthropicChat } from '../services/anthropicService.js';
 import { isOpenAIModel, processOpenAIChat, streamOpenAIChat } from '../services/openaiService.js';
+import { isOllamaModel, processOllamaChat, streamOllamaChat } from '../services/ollamaService.js';
+import { isLocalModel, processLocalChat, streamLocalChat } from '../services/localInferenceService.js';
 
 /**
  * Process a chat completion request
@@ -19,9 +21,9 @@ export const completeChat = async (req, res) => {
     // Check against list of available models to prevent abuse
     // Skip this check for:
     // 1. Instant mode (uses meta-llama/llama-4-scout)
-    // 2. Direct provider models (Anthropic, OpenAI, Gemini)
+    // 2. Direct provider models (Anthropic, OpenAI, Gemini, Ollama, Local)
     const allowedModels = process.env.ALLOWED_MODELS?.split(',') || [];
-    const isDirectProviderModel = isAnthropicModel(modelType) || isOpenAIModel(modelType) || isGeminiModel(modelType);
+    const isDirectProviderModel = isAnthropicModel(modelType) || isOpenAIModel(modelType) || isGeminiModel(modelType) || isOllamaModel(modelType) || isLocalModel(modelType);
     
     if (mode !== 'instant' && !isDirectProviderModel && !allowedModels.includes(modelType)) {
       return res.status(400).json({ error: 'Invalid model type requested' });
@@ -95,6 +97,40 @@ export const completeChat = async (req, res) => {
         console.error('Error processing Gemini request:', error);
         return res.status(500).json({
           error: 'Gemini API error',
+          details: error.message,
+          modelType: modelType
+        });
+      }
+    }
+    
+    // Check if this is an Ollama model
+    if (isOllamaModel(modelType)) {
+      console.log(`Detected Ollama model: ${modelType}`);
+      
+      try {
+        const ollamaResponse = await processOllamaChat(modelType, prompt, imageData, systemPrompt, messages);
+        return res.status(200).json(ollamaResponse);
+      } catch (error) {
+        console.error('Error processing Ollama request:', error);
+        return res.status(500).json({
+          error: 'Ollama API error',
+          details: error.message,
+          modelType: modelType
+        });
+      }
+    }
+    
+    // Check if this is a local model
+    if (isLocalModel(modelType)) {
+      console.log(`Detected local model: ${modelType}`);
+      
+      try {
+        const localResponse = await processLocalChat(modelType, prompt, imageData, systemPrompt, messages);
+        return res.status(200).json(localResponse);
+      } catch (error) {
+        console.error('Error processing local model request:', error);
+        return res.status(500).json({
+          error: 'Local model API error',
           details: error.message,
           modelType: modelType
         });
@@ -377,6 +413,50 @@ export const streamChat = async (req, res) => {
         return res.end();
       } catch (error) {
         console.error('Error in Gemini streaming:', error);
+        res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        return res.end();
+      }
+    }
+    
+    // Check if this is an Ollama model
+    if (isOllamaModel(modelType)) {
+      console.log(`Detected Ollama model for streaming: ${modelType}`);
+      
+      try {
+        await streamOllamaChat(
+          modelType,
+          prompt,
+          imageData,
+          systemPrompt,
+          (chunk) => res.write(chunk),
+          messages
+        );
+        return res.end();
+      } catch (error) {
+        console.error('Error in Ollama streaming:', error);
+        res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        return res.end();
+      }
+    }
+    
+    // Check if this is a local model
+    if (isLocalModel(modelType)) {
+      console.log(`Detected local model for streaming: ${modelType}`);
+      
+      try {
+        await streamLocalChat(
+          modelType,
+          prompt,
+          imageData,
+          systemPrompt,
+          (chunk) => res.write(chunk),
+          messages
+        );
+        return res.end();
+      } catch (error) {
+        console.error('Error in local model streaming:', error);
         res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
         res.write('data: [DONE]\n\n');
         return res.end();

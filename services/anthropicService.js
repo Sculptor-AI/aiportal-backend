@@ -228,6 +228,19 @@ export const getAnthropicModels = () => {
         completion: 0.015
       },
       isBackendModel: true
+    },
+    {
+      id: 'anthropic/claude-4-haiku',
+      name: 'Claude 4 Haiku',
+      provider: 'anthropic',
+      source: 'anthropic',
+      context_length: 200000,
+      capabilities: ['text', 'vision'],
+      pricing: {
+        prompt: 0.00025,
+        completion: 0.00125
+      },
+      isBackendModel: true
     }
   ];
 }; 

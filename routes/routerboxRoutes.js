@@ -1,7 +1,12 @@
 import express from 'express';
 import { RouterboxService } from '../services/routerboxService.js';
 import { CustomModelService } from '../services/customModelService.js';
-import { protect } from '../middleware/authMiddleware.js';
+import { getGeminiModels } from '../services/geminiService.js';
+import { getAnthropicModels } from '../services/anthropicService.js';
+import { getOpenAIModels } from '../services/openaiService.js';
+import { OllamaService } from '../services/ollamaService.js';
+import { LocalInferenceService } from '../services/localInferenceService.js';
+import { protect, optionalAuth } from '../middleware/authMiddleware.js';
 import { checkModelRateLimit, recordModelUsage } from '../middleware/rateLimitMiddleware.js';
 
 const router = express.Router();
@@ -19,7 +24,9 @@ router.post('/completions', protect, checkModelRateLimit, recordModelUsage, asyn
       temperature = 0.7,
       max_tokens,
       stream = false,
-      user
+      user,
+      web_search = false,
+      search_query = null
     } = req.body;
 
     // Validate required fields
@@ -51,7 +58,9 @@ router.post('/completions', protect, checkModelRateLimit, recordModelUsage, asyn
       temperature,
       max_tokens,
       user: req.user.id,
-      streaming: stream
+      streaming: stream,
+      webSearch: web_search,
+      searchQuery: search_query
     };
 
     // Handle streaming requests
@@ -93,43 +102,116 @@ router.post('/completions', protect, checkModelRateLimit, recordModelUsage, asyn
 
 /**
  * GET /api/v1/models
- * List available models
+ * List available models (OpenRouter-compatible)
  */
 router.get('/models', protect, async (req, res) => {
   try {
-    // Load custom models
-    const customModels = await CustomModelService.getAllCustomModels();
+    let allModels = [];
     
-    // Base models
-    const baseModels = [
-      // Anthropic models
-      { id: 'anthropic/claude-4-opus', object: 'model', created: Date.now(), owned_by: 'anthropic' },
-      { id: 'anthropic/claude-4-sonnet', object: 'model', created: Date.now(), owned_by: 'anthropic' },
+    // Get Anthropic models if API key is configured
+    if (process.env.ANTHROPIC_API_KEY) {
+      try {
+        const anthropicModels = getAnthropicModels().map(model => ({
+          id: model.id,
+          object: 'model',
+          created: Date.now(),
+          owned_by: 'anthropic'
+        }));
+        allModels = [...allModels, ...anthropicModels];
+      } catch (error) {
+        console.error('Error getting Anthropic models:', error);
+      }
+    }
+    
+    // Get OpenAI models if API key is configured
+    if (process.env.OPENAI_API_KEY) {
+      try {
+        const openaiModels = getOpenAIModels().map(model => ({
+          id: model.id,
+          object: 'model',
+          created: Date.now(),
+          owned_by: 'openai'
+        }));
+        allModels = [...allModels, ...openaiModels];
+      } catch (error) {
+        console.error('Error getting OpenAI models:', error);
+      }
+    }
+    
+    // Get Gemini models if API key is configured
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        const geminiModels = getGeminiModels().map(model => ({
+          id: model.id,
+          object: 'model',
+          created: Date.now(),
+          owned_by: 'google'
+        }));
+        allModels = [...allModels, ...geminiModels];
+      } catch (error) {
+        console.error('Error getting Gemini models:', error);
+      }
+    }
+    
+    // Get Ollama models if available
+    try {
+      const ollamaService = new OllamaService();
+      if (await ollamaService.isServerRunning()) {
+        const ollamaModels = await ollamaService.getAvailableModels();
+        const formattedOllamaModels = ollamaModels.map(model => ({
+          id: `ollama/${model.name}`,
+          object: 'model',
+          created: Date.now(),
+          owned_by: 'ollama'
+        }));
+        
+        allModels = [...allModels, ...formattedOllamaModels];
+      }
+    } catch (error) {
+      console.error('Error getting Ollama models:', error);
+    }
+    
+    // Get Local GGUF models if available
+    try {
+      const localService = new LocalInferenceService();
+      if (await localService.isAvailable()) {
+        const localModels = await localService.getAvailableModels();
+        const formattedLocalModels = localModels.map(model => ({
+          id: model.id,
+          object: 'model',
+          created: Date.now(),
+          owned_by: 'local'
+        }));
+        
+        allModels = [...allModels, ...formattedLocalModels];
+      }
+    } catch (error) {
+      console.error('Error getting local models:', error);
+    }
+    
+    // Get custom models
+    try {
+      const customModels = await CustomModelService.getAllCustomModels();
+      const formattedCustomModels = customModels.map(model => ({
+        id: model.id,
+        object: 'model',
+        created: new Date(model.created_at).getTime(),
+        owned_by: 'custom',
+        description: model.description,
+        name: model.name,
+        capabilities: model.capabilities
+      }));
       
-      // OpenAI models
-      { id: 'openai/gpt-4o', object: 'model', created: Date.now(), owned_by: 'openai' },
-      { id: 'openai/o3', object: 'model', created: Date.now(), owned_by: 'openai' },
-      
-      // Gemini models
-      { id: 'google/gemini-2.5-flash', object: 'model', created: Date.now(), owned_by: 'google' },
-      { id: 'google/gemini-2.5-pro', object: 'model', created: Date.now(), owned_by: 'google' },
-    ];
-
-    // Convert custom models to OpenAI format
-    const customModelList = customModels.map(model => ({
-      id: model.id,
-      object: 'model',
-      created: new Date(model.created_at).getTime(),
-      owned_by: 'custom',
-      description: model.description,
-      name: model.name,
-      capabilities: model.capabilities
-    }));
+      allModels = [...allModels, ...formattedCustomModels];
+    } catch (error) {
+      console.error('Error getting custom models:', error);
+    }
 
     res.json({
       object: 'list',
-      data: [...baseModels, ...customModelList]
+      data: allModels
     });
+    
   } catch (error) {
     console.error('Error fetching models:', error);
     res.status(500).json({

@@ -309,11 +309,24 @@ export const getGeminiModels = () => {
       name: 'Gemini 2.5 Pro',
       provider: 'google',
       source: 'gemini',
-      context_length: 1048576,
-      capabilities: ['text', 'vision', 'audio'],
+      context_length: 2097152,
+      capabilities: ['text', 'vision', 'thinking'],
       pricing: {
-        prompt: 0.0005,
-        completion: 0.0015
+        prompt: 0.00125,
+        completion: 0.005
+      },
+      isBackendModel: true
+    },
+    {
+      id: 'google/gemini-2.0-flash-exp',
+      name: 'Gemini 2.0 Flash Experimental',
+      provider: 'google',
+      source: 'gemini',
+      context_length: 1048576,
+      capabilities: ['text', 'vision', 'audio', 'multimodal'],
+      pricing: {
+        prompt: 0.00001,
+        completion: 0.00003
       },
       isBackendModel: true
     }

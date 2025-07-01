@@ -10,10 +10,8 @@ const router = express.Router();
 // Get available models
 router.get('/models', optionalAuth, getModels);
 
-// Chat completion endpoint
-router.post('/chat', protect, validateChatRequest, completeChat);
-
-// Streaming chat completion endpoint
+// All chat endpoints now use streaming by default
+router.post('/chat', protect, validateChatRequest, streamChat);
 router.post('/chat/stream', protect, validateChatRequest, streamChat);
 
 // Search endpoints

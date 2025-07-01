@@ -219,15 +219,41 @@ export const getOpenAIModels = () => {
       isBackendModel: true
     },
     {
+      id: 'openai/gpt-4o-mini',
+      name: 'GPT-4o Mini',
+      provider: 'openai',
+      source: 'openai',
+      context_length: 128000,
+      capabilities: ['text', 'vision'],
+      pricing: {
+        prompt: 0.00015,
+        completion: 0.0006
+      },
+      isBackendModel: true
+    },
+    {
       id: 'openai/o3',
       name: 'ChatGPT o3',
       provider: 'openai',
       source: 'openai',
-      context_length: 128000, // Placeholder - value inherited from GPT-4o
-      capabilities: ['text'], // Placeholder - assuming text-only
-      pricing: { // Placeholder - value inherited from GPT-4o
-        prompt: 0.005,
-        completion: 0.015
+      context_length: 128000,
+      capabilities: ['text', 'reasoning'],
+      pricing: {
+        prompt: 0.06,
+        completion: 0.24
+      },
+      isBackendModel: true
+    },
+    {
+      id: 'openai/o3-mini',
+      name: 'ChatGPT o3-mini',
+      provider: 'openai',
+      source: 'openai',
+      context_length: 128000,
+      capabilities: ['text', 'reasoning'],
+      pricing: {
+        prompt: 0.015,
+        completion: 0.06
       },
       isBackendModel: true
     }

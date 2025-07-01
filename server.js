@@ -1,6 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import https from 'https';
+import fs from 'fs';
+import path from 'path';
 import dotenv from 'dotenv';
 import { router as apiRouter } from './routes/api.js';
 import imageGenerationRoutes from './routes/imageGenerationRoutes.js';
@@ -23,13 +26,19 @@ const corsOptions = {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    // Allow all localhost/127.0.0.1 requests on any port
-    if (origin.match(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/)) {
+    // Allow all localhost/127.0.0.1 requests on any port (HTTPS preferred)
+    if (origin.match(/^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/)) {
       return callback(null, true);
     }
     
-    // Allow local network requests (192.168.x.x, 10.x.x.x, etc.)
-    if (origin.match(/^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/)) {
+    // Allow local network requests (HTTPS only)
+    if (origin.match(/^https:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/)) {
+      return callback(null, true);
+    }
+    
+    // Allow HTTP only for localhost during development
+    if (process.env.NODE_ENV !== 'production' && origin.match(/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/)) {
+      console.warn('⚠️  HTTP request detected. Please upgrade to HTTPS for security.');
       return callback(null, true);
     }
     
@@ -101,22 +110,61 @@ async function startServer() {
   try {
     await database.connect();
     
-    const server = app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Server running on port ${PORT}`);
-      console.log(`Local access: http://localhost:${PORT}`);
-      console.log(`WSL access: http://172.24.74.81:${PORT}`);
-      console.log(`Network access: http://192.168.1.85:${PORT} (if port forwarded)`);
-      console.log(`CORS enabled for: local network and specified domains`);
-      console.log('Database connected and ready');
-      console.log(`Health check: http://localhost:${PORT}/health`);
-      console.log(`📖 WSL Network Setup Required - see instructions below`);
-      console.log(`\n🔧 WSL Network Setup:`);
-      console.log(`1. Run in Windows PowerShell as Administrator:`);
-      console.log(`   netsh interface portproxy add v4tov4 listenport=${PORT} listenaddress=0.0.0.0 connectport=${PORT} connectaddress=172.24.74.81`);
-      console.log(`2. Allow through Windows Firewall:`);
-      console.log(`   New-NetFirewallRule -DisplayName "WSL AI Portal" -Direction Inbound -LocalPort ${PORT} -Protocol TCP -Action Allow`);
-      console.log(`3. Then access from other devices: http://192.168.1.85:${PORT}`);
-    });
+    // Check for SSL certificates
+    const useHTTPS = process.env.SSL_CERT_PATH && process.env.SSL_KEY_PATH;
+    let server;
+    
+    if (useHTTPS) {
+      try {
+        const httpsOptions = {
+          key: fs.readFileSync(process.env.SSL_KEY_PATH),
+          cert: fs.readFileSync(process.env.SSL_CERT_PATH)
+        };
+        
+        server = https.createServer(httpsOptions, app).listen(PORT, '0.0.0.0', () => {
+          console.log(`🔒 HTTPS Server running on port ${PORT}`);
+          console.log(`Local access: https://localhost:${PORT}`);
+          console.log(`WSL access: https://172.24.74.81:${PORT}`);
+          console.log(`Network access: https://192.168.1.85:${PORT} (if port forwarded)`);
+          console.log(`CORS enabled for: local network and specified domains`);
+          console.log('Database connected and ready');
+          console.log(`Health check: https://localhost:${PORT}/health`);
+          console.log(`📖 WSL Network Setup Required - see instructions below`);
+          console.log(`\n🔧 WSL Network Setup:`);
+          console.log(`1. Run in Windows PowerShell as Administrator:`);
+          console.log(`   netsh interface portproxy add v4tov4 listenport=${PORT} listenaddress=0.0.0.0 connectport=${PORT} connectaddress=172.24.74.81`);
+          console.log(`2. Allow through Windows Firewall:`);
+          console.log(`   New-NetFirewallRule -DisplayName "WSL AI Portal" -Direction Inbound -LocalPort ${PORT} -Protocol TCP -Action Allow`);
+          console.log(`3. Then access from other devices: https://192.168.1.85:${PORT}`);
+        });
+      } catch (sslError) {
+        console.error('❌ SSL certificate error:', sslError.message);
+        console.log('💡 Falling back to HTTP mode. Please check your SSL certificate configuration.');
+        useHTTPS = false;
+      }
+    }
+    
+    if (!useHTTPS) {
+      console.warn('⚠️  Starting in HTTP mode - This is insecure for production!');
+      console.log('💡 To enable HTTPS, set SSL_CERT_PATH and SSL_KEY_PATH environment variables');
+      
+      server = app.listen(PORT, '0.0.0.0', () => {
+        console.log(`Server running on port ${PORT}`);
+        console.log(`Local access: http://localhost:${PORT}`);
+        console.log(`WSL access: http://172.24.74.81:${PORT}`);
+        console.log(`Network access: http://192.168.1.85:${PORT} (if port forwarded)`);
+        console.log(`CORS enabled for: local network and specified domains`);
+        console.log('Database connected and ready');
+        console.log(`Health check: http://localhost:${PORT}/health`);
+        console.log(`📖 WSL Network Setup Required - see instructions below`);
+        console.log(`\n🔧 WSL Network Setup:`);
+        console.log(`1. Run in Windows PowerShell as Administrator:`);
+        console.log(`   netsh interface portproxy add v4tov4 listenport=${PORT} listenaddress=0.0.0.0 connectport=${PORT} connectaddress=172.24.74.81`);
+        console.log(`2. Allow through Windows Firewall:`);
+        console.log(`   New-NetFirewallRule -DisplayName "WSL AI Portal" -Direction Inbound -LocalPort ${PORT} -Protocol TCP -Action Allow`);
+        console.log(`3. Then access from other devices: http://192.168.1.85:${PORT}`);
+      });
+    }
 
     server.on('error', (err) => {
       if (err.code === 'EADDRINUSE') {
