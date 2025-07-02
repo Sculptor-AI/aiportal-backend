@@ -7,20 +7,160 @@ The AI Portal Backend is a secure, scalable "Routerbox" system that provides Ope
 ## 📡 Network Access
 
 ### Base URLs
-- **Local**: `http://localhost:3000`
-- **Network**: `http://YOUR_IP:3000` (accessible from other devices on your network)
-- **WSL/Docker**: Use your machine's IP address, not 127.0.0.1
+- **Production**: `https://api.sculptorai.org` (Recommended - Cloudflare-secured)
+- **Local Development**: `http://localhost:3000`
+- **Direct IP**: `https://73.118.140.130:3000` (Self-signed certificate)
 
-### Finding Your IP Address
-```bash
-# Windows (in Command Prompt)
-ipconfig
+### Cloudflare-Secured Endpoint
+The production API is available at `https://api.sculptorai.org` with:
+- ✅ **Valid TLS Certificate** (Cloudflare-managed)
+- ✅ **No CORS restrictions** (All origins allowed)
+- ✅ **Global CDN** (Fast worldwide access)
+- ✅ **DDoS Protection** (Enterprise-grade security)
 
-# Linux/Mac
-ip addr show
-# or
-ifconfig
+### Frontend Migration Guide
+
+#### 🔄 Quick Migration Steps
+
+1. **Update your API base URL** in your environment/config files:
+   ```javascript
+   // .env or config.js
+   // OLD
+   VITE_API_BASE_URL=https://73.118.140.130:3000
+   
+   // NEW
+   VITE_API_BASE_URL=https://api.sculptorai.org
+   ```
+
+2. **Update all fetch calls** (if hardcoded):
+   ```javascript
+   // Before
+   fetch('https://73.118.140.130:3000/api/auth/login', { ... })
+   
+   // After  
+   fetch('https://api.sculptorai.org/api/auth/login', { ... })
+   ```
+
+#### 🚨 Breaking Changes & Benefits
+
+**✅ What's Fixed:**
+- **CORS Errors**: No more "Cross-Origin Request Blocked" errors
+- **SSL Certificate Issues**: Valid Cloudflare certificate
+- **Browser Security Warnings**: No more "Not Secure" warnings
+- **Global Access**: Fast CDN-backed requests worldwide
+
+**⚠️ What to Update:**
+- Replace ALL hardcoded IP references with `api.sculptorai.org`
+- Remove any CORS proxy configurations (no longer needed)
+- Update development environment variables
+- Update deployment configurations
+
+#### 📱 Framework-Specific Migration
+
+**React/Next.js:**
+```javascript
+// .env.local
+NEXT_PUBLIC_API_URL=https://api.sculptorai.org
+
+// In your API client
+const apiClient = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  }
+});
 ```
+
+**Vue/Nuxt:**
+```javascript
+// nuxt.config.js
+export default {
+  runtimeConfig: {
+    public: {
+      apiBase: 'https://api.sculptorai.org'
+    }
+  }
+}
+
+// In your composables
+const { $config } = useNuxtApp()
+const apiBase = $config.public.apiBase
+```
+
+**Svelte/SvelteKit:**
+```javascript
+// .env
+PUBLIC_API_BASE=https://api.sculptorai.org
+
+// In your stores or components
+import { PUBLIC_API_BASE } from '$env/static/public';
+const response = await fetch(`${PUBLIC_API_BASE}/api/auth/login`, { ... });
+```
+
+**Angular:**
+```typescript
+// environment.ts
+export const environment = {
+  production: false,
+  apiUrl: 'https://api.sculptorai.org'
+};
+
+// In your service
+constructor(private http: HttpClient) {}
+login(credentials: any) {
+  return this.http.post(`${environment.apiUrl}/api/auth/login`, credentials);
+}
+```
+
+#### 🔧 Testing the Migration
+
+**1. Health Check:**
+```bash
+curl https://api.sculptorai.org/health
+```
+
+**2. Test Authentication:**
+```javascript
+// Verify API key works
+fetch('https://api.sculptorai.org/api/v1/chat/models', {
+  headers: { 'X-API-Key': 'ak_your_key_here' }
+})
+.then(res => res.json())
+.then(data => console.log('✅ API working:', data))
+.catch(err => console.error('❌ API error:', err));
+```
+
+**3. Test CORS:**
+```javascript
+// This should work from any domain now
+fetch('https://api.sculptorai.org/api/v1/chat/completions', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-API-Key': 'ak_your_key_here'
+  },
+  body: JSON.stringify({
+    model: 'custom/fast-responder',
+    messages: [{ role: 'user', content: 'Hello!' }]
+  })
+})
+.then(res => res.json())
+.then(data => console.log('✅ CORS working:', data));
+```
+
+#### 🎯 Deployment Considerations
+
+**Production Deployments:**
+- Update CI/CD environment variables
+- Update Docker container environment variables
+- Update Vercel/Netlify environment variables
+- Test from your production domain
+
+**Local Development:**
+- Update `.env.local` files
+- Clear browser cache (Ctrl+Shift+R)
+- Test from `localhost` and `127.0.0.1`
+- Verify WebSocket connections (if using streaming)
 
 ## 🔐 Authentication
 
@@ -627,9 +767,20 @@ CORS_ORIGINS=http://localhost:3009,http://localhost:3010
 - JWT token expiration and rotation
 - API key hashing and secure storage
 - Input validation on all endpoints
-- CORS protection
+- **CORS**: Completely disabled for maximum frontend compatibility
 - SQL injection prevention
 - No conversation data storage (privacy-focused)
+- Cloudflare DDoS and bot protection (when using `api.sculptorai.org`)
+
+### CORS Configuration
+**Current Status: DISABLED** ✅
+- **Origin**: `*` (All origins allowed)
+- **Methods**: `GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH`
+- **Headers**: `*` (All headers allowed)
+- **Credentials**: `true` (Supports authentication)
+- **Preflight**: Automatically handled with 200 responses
+
+This configuration ensures maximum compatibility with all frontend frameworks, mobile apps, and browser environments. The API can be called from any domain without CORS restrictions.
 
 ---
 
@@ -677,7 +828,7 @@ CORS_ORIGINS=http://localhost:3009,http://localhost:3010
 
 **Standard Chat Request:**
 ```javascript
-const response = await fetch('http://YOUR_IP:3000/api/v1/chat/completions', {
+const response = await fetch('https://api.sculptorai.org/api/v1/chat/completions', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -697,7 +848,7 @@ console.log(data.choices[0].message.content);
 
 **Chat with Web Search:**
 ```javascript
-const response = await fetch('http://YOUR_IP:3000/api/v1/chat/completions', {
+const response = await fetch('https://api.sculptorai.org/api/v1/chat/completions', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -719,7 +870,7 @@ console.log('Sources:', data.sources);
 
 **Streaming with Web Search:**
 ```javascript
-const response = await fetch('http://YOUR_IP:3000/api/v1/chat/completions', {
+const response = await fetch('https://api.sculptorai.org/api/v1/chat/completions', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -776,7 +927,7 @@ while (true) {
 ```python
 import requests
 
-response = requests.post('http://YOUR_IP:3000/api/v1/chat/completions', 
+response = requests.post('https://api.sculptorai.org/api/v1/chat/completions', 
   headers={
     'Content-Type': 'application/json',
     'X-API-Key': 'ak_your_api_key_here'
@@ -796,7 +947,7 @@ print(response.json()['choices'][0]['message']['content'])
 ```python
 import requests
 
-response = requests.post('http://YOUR_IP:3000/api/v1/chat/completions', 
+response = requests.post('https://api.sculptorai.org/api/v1/chat/completions', 
   headers={
     'Content-Type': 'application/json',
     'X-API-Key': 'ak_your_api_key_here'
@@ -821,7 +972,7 @@ for source in result.get('sources', []):
 
 **Standard Request:**
 ```bash
-curl -X POST http://YOUR_IP:3000/api/v1/chat/completions \
+curl -X POST https://api.sculptorai.org/api/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "X-API-Key: ak_your_api_key_here" \
   -d '{
@@ -834,7 +985,7 @@ curl -X POST http://YOUR_IP:3000/api/v1/chat/completions \
 
 **Request with Web Search:**
 ```bash
-curl -X POST http://YOUR_IP:3000/api/v1/chat/completions \
+curl -X POST https://api.sculptorai.org/api/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "X-API-Key: ak_your_api_key_here" \
   -d '{
@@ -848,7 +999,7 @@ curl -X POST http://YOUR_IP:3000/api/v1/chat/completions \
 
 **Streaming with Web Search:**
 ```bash
-curl -X POST http://YOUR_IP:3000/api/v1/chat/completions \
+curl -X POST https://api.sculptorai.org/api/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "X-API-Key: ak_your_api_key_here" \
   -H "Accept: text/event-stream" \
@@ -895,8 +1046,12 @@ PORT=3001 npm start
 - Or use JWT token in `Authorization: Bearer` header
 
 **"CORS error"**
-- Server now allows all local network access by default
-- Check if you're using the correct IP address
+- ✅ **FIXED**: CORS is now completely disabled for maximum compatibility
+- All origins are allowed (`*`)
+- All methods are supported (GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH)
+- All headers are allowed
+- Credentials are supported for authenticated requests
+- Use `https://api.sculptorai.org` for best experience
 
 **"Rate limit exceeded"**
 - Wait for the rate limit window to reset

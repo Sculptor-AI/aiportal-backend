@@ -20,44 +20,15 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Configure CORS with settings for both local development and production
+// CORS disabled - allow all origins
 const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    // Allow all localhost/127.0.0.1 requests on any port (HTTPS preferred)
-    if (origin.match(/^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/)) {
-      return callback(null, true);
-    }
-    
-    // Allow local network requests (HTTPS only)
-    if (origin.match(/^https:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/)) {
-      return callback(null, true);
-    }
-    
-    // Allow HTTP only for localhost during development
-    if (process.env.NODE_ENV !== 'production' && origin.match(/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/)) {
-      console.warn('⚠️  HTTP request detected. Please upgrade to HTTPS for security.');
-      return callback(null, true);
-    }
-    
-    // Allow specific production domains
-    const allowedOrigins = [
-      'https://aiportal.vercel.app',
-      'https://ai.explodingcb.com'
-    ];
-    
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-    
-    // Reject all other origins
-    callback(new Error('Not allowed by CORS'));
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
-  credentials: true
+  origin: true, // Allow all origins
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD', 'PATCH'],
+  allowedHeaders: ['*'], // Allow all headers
+  exposedHeaders: ['*'], // Expose all headers
+  credentials: true,
+  preflightContinue: false,
+  optionsSuccessStatus: 200
 };
 
 // Middleware
@@ -68,6 +39,24 @@ const corsOptions = {
 
 // Enable CORS - this must come before other middleware
 app.use(cors(corsOptions));
+
+// Additional CORS middleware to handle any edge cases
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH');
+  res.header('Access-Control-Allow-Headers', '*');
+  res.header('Access-Control-Expose-Headers', '*');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Trust Cloudflare proxy
+  app.set('trust proxy', true);
+  
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+  next();
+});
 
 // Increase JSON body size limit to 50MB to handle base64 encoded images
 app.use(express.json({ limit: '50mb' }));
