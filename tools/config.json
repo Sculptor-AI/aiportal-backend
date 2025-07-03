@@ -1,0 +1,24 @@
+{
+  "globalSettings": {
+    "enabled": true,
+    "maxConcurrentToolCalls": 5,
+    "toolExecutionTimeout": 30000,
+    "allowedModels": [],
+    "blockedModels": []
+  },
+  "availableTools": {
+    "test-tool": {
+      "enabled": true,
+      "name": "Test Tool",
+      "description": "A simple tool to test the tools system",
+      "version": "1.0.0",
+      "allowedModels": ["openai/gpt-4o"],
+      "maxExecutionTime": 5000,
+      "requiresAuth": false,
+      "rateLimit": {
+        "requests": 10,
+        "window": "1m"
+      }
+    }
+  }
+}

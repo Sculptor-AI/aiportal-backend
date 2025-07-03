@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Portal Admin</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        
+        /* Header */
+        .header { background: #333; color: white; padding: 15px 0; margin-bottom: 20px; }
+        .header h1 { text-align: center; }
+        .user-info { text-align: center; margin-top: 10px; font-size: 14px; }
+        .logout-btn { background: #e74c3c; color: white; padding: 5px 10px; border: none; cursor: pointer; border-radius: 3px; }
+        
+        /* Navigation */
+        .nav { background: white; padding: 15px; margin-bottom: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .nav button { background: #3498db; color: white; padding: 10px 20px; margin-right: 10px; border: none; cursor: pointer; border-radius: 3px; }
+        .nav button.active { background: #2980b9; }
+        .nav button:hover { background: #2980b9; }
+        
+        /* Content */
+        .content { background: white; padding: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .section { display: none; }
+        .section.active { display: block; }
+        
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #f8f9fa; font-weight: bold; }
+        tr:hover { background: #f8f9fa; }
+        
+        /* Forms */
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select, textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px; }
+        
+        /* Buttons */
+        .btn { background: #3498db; color: white; padding: 8px 15px; border: none; cursor: pointer; border-radius: 3px; margin-right: 5px; }
+        .btn-success { background: #27ae60; }
+        .btn-warning { background: #f39c12; }
+        .btn-danger { background: #e74c3c; }
+        .btn:hover { opacity: 0.9; }
+        
+        /* Login Form */
+        .login-form { max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        
+        /* Status indicators */
+        .status-pending { background: #f39c12; color: white; padding: 3px 8px; border-radius: 3px; font-size: 12px; }
+        .status-active { background: #27ae60; color: white; padding: 3px 8px; border-radius: 3px; font-size: 12px; }
+        .status-admin { background: #9b59b6; color: white; padding: 3px 8px; border-radius: 3px; font-size: 12px; }
+        
+        /* Loading */
+        .loading { text-align: center; padding: 20px; color: #666; }
+        .error { color: #e74c3c; margin-top: 10px; }
+        .success { color: #27ae60; margin-top: 10px; }
+        
+        /* Stats */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: #3498db; color: white; padding: 20px; border-radius: 5px; text-align: center; }
+        .stat-number { font-size: 2em; font-weight: bold; }
+        .stat-label { margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <!-- Login Form -->
+    <div id="loginSection" class="login-form">
+        <h2>Admin Login</h2>
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" required>
+            </div>
+            <button type="submit" class="btn">Login</button>
+            <div id="loginError" class="error"></div>
+        </form>
+    </div>
+
+    <!-- Main Admin Interface -->
+    <div id="adminInterface" style="display: none;">
+        <div class="header">
+            <div class="container">
+                <h1>AI Portal Admin</h1>
+                <div class="user-info">
+                    Logged in as: <span id="currentUser"></span>
+                    <button class="logout-btn" onclick="logout()">Logout</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="nav">
+                <button class="nav-btn active" onclick="showSection('dashboard')">Dashboard</button>
+                <button class="nav-btn" onclick="showSection('users')">Users</button>
+                <button class="nav-btn" onclick="showSection('models')">Models</button>
+            </div>
+
+            <div class="content">
+                <!-- Dashboard Section -->
+                <div id="dashboard" class="section active">
+                    <h2>Dashboard</h2>
+                    <div id="statsContainer" class="stats-grid">
+                        <!-- Stats will be loaded here -->
+                    </div>
+                    <div id="dashboardInfo">
+                        <p>Welcome to the AI Portal Admin Dashboard. Use the navigation above to manage users and models.</p>
+                    </div>
+                </div>
+
+                <!-- Users Section -->
+                <div id="users" class="section">
+                    <h2>User Management</h2>
+                    <div id="usersContent">
+                        <div class="loading">Loading users...</div>
+                    </div>
+                </div>
+
+                <!-- Models Section -->
+                <div id="models" class="section">
+                    <h2>Model Management</h2>
+                    <div id="modelsContent">
+                        <div class="loading">Loading models...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="admin.js"></script>
+</body>
+</html>

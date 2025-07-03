@@ -1,0 +1,67 @@
+{
+  "id": "wolfram-alpha",
+  "name": "Wolfram Alpha",
+  "description": "Query Wolfram Alpha for computational knowledge, mathematical calculations, unit conversions, scientific data, and more. Use this tool when you need accurate computational results, scientific facts, or mathematical solutions.",
+  "version": "1.0.0",
+  "enabled": true,
+  "allowedModels": [],
+  "maxExecutionTime": 15000,
+  "requiresAuth": false,
+  "rateLimit": {
+    "requests": 30,
+    "window": "1m"
+  },
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "The query to send to Wolfram Alpha. Can be a natural language question, mathematical expression, or computational request. Examples: 'population of France', 'integrate x^2 dx', 'weather in New York', '10 densest elements'"
+      },
+      "maxchars": {
+        "type": "integer",
+        "description": "Optional. Maximum number of characters in the response (default: 6800, min: 100, max: 10000)",
+        "minimum": 100,
+        "maximum": 10000,
+        "default": 6800
+      }
+    },
+    "required": ["query"]
+  },
+  "returns": {
+    "type": "object",
+    "properties": {
+      "success": {
+        "type": "boolean",
+        "description": "Whether the query was successful"
+      },
+      "query": {
+        "type": "string",
+        "description": "The original query sent"
+      },
+      "result": {
+        "type": "string",
+        "description": "The computational result or answer from Wolfram Alpha"
+      },
+      "interpretation": {
+        "type": "string",
+        "description": "How Wolfram Alpha interpreted your query"
+      },
+      "images": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Array of image URLs included in the response"
+      },
+      "websiteUrl": {
+        "type": "string",
+        "description": "URL to view full results on Wolfram Alpha website"
+      },
+      "error": {
+        "type": "string",
+        "description": "Error message if the query failed"
+      }
+    }
+  }
+} 

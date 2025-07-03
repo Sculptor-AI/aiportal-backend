@@ -2,9 +2,85 @@ import axios from 'axios';
 import { formatResponsePacket } from '../utils/formatters.js';
 import { isGeminiModel, processGeminiChat, streamGeminiChat } from '../services/geminiService.js';
 import { isAnthropicModel, processAnthropicChat, streamAnthropicChat } from '../services/anthropicService.js';
-import { isOpenAIModel, processOpenAIChat, streamOpenAIChat } from '../services/openaiService.js';
+import { isOpenAIModel, processOpenAIChat, streamOpenAIChat, streamOpenAICompatibleChat, processOpenAICompatibleChat } from '../services/openaiService.js';
 import { isOllamaModel, processOllamaChat, streamOllamaChat } from '../services/ollamaService.js';
 import { isLocalModel, processLocalChat, streamLocalChat } from '../services/localInferenceService.js';
+import modelConfigService from '../services/modelConfigService.js';
+import toolsService from '../services/toolsService.js';
+import systemPromptService from '../services/systemPromptService.js';
+
+/**
+ * Handle tool calls in streaming response
+ * @param {string} chunk - Response chunk
+ * @param {string} modelType - Model type
+ * @param {Function} writeStream - Function to write to stream
+ * @returns {Promise<boolean>} - True if tool call was handled
+ */
+async function handleToolCall(chunk, modelType, writeStream) {
+  try {
+    // Parse chunk to check for tool calls
+    const lines = chunk.split('\n');
+    for (const line of lines) {
+      if (line.startsWith('data: ') && !line.includes('[DONE]')) {
+        try {
+          const data = JSON.parse(line.slice(6));
+          const choice = data.choices?.[0];
+          
+          if (choice?.delta?.tool_calls || choice?.message?.tool_calls) {
+            const toolCalls = choice.delta?.tool_calls || choice.message?.tool_calls;
+            
+            for (const toolCall of toolCalls) {
+              if (toolCall.function?.name) {
+                // Send tool usage indicator
+                writeStream(`data: ${JSON.stringify({
+                  type: 'tool_call',
+                  tool_name: toolCall.function.name,
+                  tool_id: toolCall.id,
+                  status: 'executing'
+                })}\n\n`);
+                
+                try {
+                  // Execute tool
+                  const parameters = JSON.parse(toolCall.function.arguments || '{}');
+                  const result = await toolsService.executeTool(
+                    toolCall.function.name, 
+                    parameters, 
+                    modelType
+                  );
+                  
+                  // Send tool result
+                  writeStream(`data: ${JSON.stringify({
+                    type: 'tool_result',
+                    tool_name: toolCall.function.name,
+                    tool_id: toolCall.id,
+                    status: 'completed',
+                    result: result
+                  })}\n\n`);
+                  
+                } catch (error) {
+                  // Send tool error
+                  writeStream(`data: ${JSON.stringify({
+                    type: 'tool_error',
+                    tool_name: toolCall.function.name,
+                    tool_id: toolCall.id,
+                    status: 'error',
+                    error: error.message
+                  })}\n\n`);
+                }
+              }
+            }
+            return true;
+          }
+        } catch (e) {
+          // Not JSON or not a tool call, continue
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error handling tool call:', error);
+  }
+  return false;
+}
 
 /**
  * Process a chat completion request
@@ -17,6 +93,10 @@ export const completeChat = async (req, res) => {
     
     // Log the request (without sensitive data)
     console.log(`Request received for model: ${modelType}, mode: ${mode}, search: ${search}, hasImage: ${!!imageData}`);
+    
+    // Get model configuration to determine routing
+    const modelConfig = modelConfigService.getModelConfig(modelType);
+    const routingService = modelConfig?.routing?.service;
     
     // Check against list of available models to prevent abuse
     // Skip this check for:
@@ -52,12 +132,48 @@ export const completeChat = async (req, res) => {
       }
     }
     
+    // Handle routing based on model configuration first
+    if (routingService) {
+      console.log(`Using routing service: ${routingService} for model: ${modelType}`);
+      
+      if (routingService === 'openai') {
+        // Use a custom OpenAI-compatible endpoint for models like Gemini flash-lite
+        try {
+          const enhancedSystemPrompt = systemPromptService.generateSystemPrompt(systemPrompt, modelType);
+          const openaiResponse = await processOpenAICompatibleChat(modelType, prompt, imageData, enhancedSystemPrompt, messages, modelConfig);
+          return res.status(200).json(openaiResponse);
+        } catch (error) {
+          console.error('Error processing OpenAI-compatible request:', error);
+          return res.status(500).json({
+            error: 'OpenAI-compatible API error',
+            details: error.message,
+            modelType: modelType
+          });
+        }
+      } else if (routingService === 'localInference') {
+        try {
+          const enhancedSystemPrompt = systemPromptService.generateSystemPrompt(systemPrompt, modelType);
+          const localResponse = await processLocalChat(modelType, prompt, imageData, enhancedSystemPrompt, messages);
+          return res.status(200).json(localResponse);
+        } catch (error) {
+          console.error('Error processing local model request:', error);
+          return res.status(500).json({
+            error: 'Local model API error',
+            details: error.message,
+            modelType: modelType
+          });
+        }
+      }
+    }
+    
+    // Fallback to provider-based routing for backward compatibility
     // Check if this is an Anthropic model
     if (isAnthropicModel(modelType)) {
       console.log(`Detected Anthropic model: ${modelType}`);
       
       try {
-        const anthropicResponse = await processAnthropicChat(modelType, prompt, imageData, systemPrompt, messages);
+        const enhancedSystemPrompt = systemPromptService.generateSystemPrompt(systemPrompt, modelType);
+        const anthropicResponse = await processAnthropicChat(modelType, prompt, imageData, enhancedSystemPrompt, messages);
         return res.status(200).json(anthropicResponse);
       } catch (error) {
         console.error('Error processing Anthropic request:', error);
@@ -74,7 +190,8 @@ export const completeChat = async (req, res) => {
       console.log(`Detected OpenAI model: ${modelType}`);
       
       try {
-        const openaiResponse = await processOpenAIChat(modelType, prompt, imageData, systemPrompt, messages);
+        const enhancedSystemPrompt = systemPromptService.generateSystemPrompt(systemPrompt, modelType);
+        const openaiResponse = await processOpenAIChat(modelType, prompt, imageData, enhancedSystemPrompt, messages);
         return res.status(200).json(openaiResponse);
       } catch (error) {
         console.error('Error processing OpenAI request:', error);
@@ -91,7 +208,8 @@ export const completeChat = async (req, res) => {
       console.log(`Detected Gemini model: ${modelType}`);
       
       try {
-        const geminiResponse = await processGeminiChat(modelType, prompt, imageData, systemPrompt, messages);
+        const enhancedSystemPrompt = systemPromptService.generateSystemPrompt(systemPrompt, modelType);
+        const geminiResponse = await processGeminiChat(modelType, prompt, imageData, enhancedSystemPrompt, messages);
         return res.status(200).json(geminiResponse);
       } catch (error) {
         console.error('Error processing Gemini request:', error);
@@ -108,7 +226,8 @@ export const completeChat = async (req, res) => {
       console.log(`Detected Ollama model: ${modelType}`);
       
       try {
-        const ollamaResponse = await processOllamaChat(modelType, prompt, imageData, systemPrompt, messages);
+        const enhancedSystemPrompt = systemPromptService.generateSystemPrompt(systemPrompt, modelType);
+        const ollamaResponse = await processOllamaChat(modelType, prompt, imageData, enhancedSystemPrompt, messages);
         return res.status(200).json(ollamaResponse);
       } catch (error) {
         console.error('Error processing Ollama request:', error);
@@ -125,7 +244,8 @@ export const completeChat = async (req, res) => {
       console.log(`Detected local model: ${modelType}`);
       
       try {
-        const localResponse = await processLocalChat(modelType, prompt, imageData, systemPrompt, messages);
+        const enhancedSystemPrompt = systemPromptService.generateSystemPrompt(systemPrompt, modelType);
+        const localResponse = await processLocalChat(modelType, prompt, imageData, enhancedSystemPrompt, messages);
         return res.status(200).json(localResponse);
       } catch (error) {
         console.error('Error processing local model request:', error);
@@ -189,8 +309,10 @@ export const completeChat = async (req, res) => {
       messages: []
     };
 
-    if (systemPrompt) {
-      openRouterPayload.messages.push({ role: 'system', content: systemPrompt });
+    // Generate enhanced system prompt with tool instructions
+    const enhancedSystemPrompt = systemPromptService.generateSystemPrompt(systemPrompt, adjustedModelType);
+    if (enhancedSystemPrompt) {
+      openRouterPayload.messages.push({ role: 'system', content: enhancedSystemPrompt });
     }
 
     openRouterPayload.messages.push({
@@ -282,6 +404,10 @@ export const streamChat = async (req, res) => {
     const doDeepResearch = deepResearch === 'true' || deepResearch === true;
     const doImageGen = imageGen === 'true' || imageGen === true;
     
+    // Get model configuration to determine routing
+    const modelConfig = modelConfigService.getModelConfig(modelType);
+    const routingService = modelConfig?.routing?.service;
+    
     // If search is enabled, use the search processing functionality
     if (doSearch) {
       try {
@@ -353,6 +479,50 @@ export const streamChat = async (req, res) => {
       }
     }
     
+    // Handle routing based on model configuration first
+    if (routingService) {
+      console.log(`Using routing service: ${routingService} for model: ${modelType}`);
+      
+      if (routingService === 'openai') {
+        // Use a custom OpenAI-compatible endpoint for models like Gemini flash-lite
+        try {
+          await streamOpenAICompatibleChat(
+            modelType,
+            prompt,
+            imageData,
+            systemPromptService.generateSystemPrompt(systemPrompt, modelType),
+            (chunk) => res.write(chunk),
+            messages,
+            modelConfig
+          );
+          return res.end();
+        } catch (error) {
+          console.error('Error in OpenAI-compatible streaming:', error);
+          res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+          res.write('data: [DONE]\n\n');
+          return res.end();
+        }
+      } else if (routingService === 'localInference') {
+        try {
+          await streamLocalChat(
+            modelType,
+            prompt,
+            imageData,
+            systemPromptService.generateSystemPrompt(systemPrompt, modelType),
+            (chunk) => res.write(chunk),
+            messages
+          );
+          return res.end();
+        } catch (error) {
+          console.error('Error in local inference streaming:', error);
+          res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+          res.write('data: [DONE]\n\n');
+          return res.end();
+        }
+      }
+    }
+    
+    // Fallback to provider-based routing for backward compatibility
     // Check if this is an Anthropic model
     if (isAnthropicModel(modelType)) {
       console.log(`Detected Anthropic model for streaming: ${modelType}`);
@@ -362,7 +532,7 @@ export const streamChat = async (req, res) => {
           modelType,
           prompt,
           imageData,
-          systemPrompt,
+          systemPromptService.generateSystemPrompt(systemPrompt, modelType),
           (chunk) => res.write(chunk),
           messages
         );
@@ -384,7 +554,7 @@ export const streamChat = async (req, res) => {
           modelType,
           prompt,
           imageData,
-          systemPrompt,
+          systemPromptService.generateSystemPrompt(systemPrompt, modelType),
           (chunk) => res.write(chunk),
           messages
         );
@@ -406,7 +576,7 @@ export const streamChat = async (req, res) => {
           modelType,
           prompt,
           imageData,
-          systemPrompt,
+          systemPromptService.generateSystemPrompt(systemPrompt, modelType),
           (chunk) => res.write(chunk),
           messages
         );
@@ -428,7 +598,7 @@ export const streamChat = async (req, res) => {
           modelType,
           prompt,
           imageData,
-          systemPrompt,
+          systemPromptService.generateSystemPrompt(systemPrompt, modelType),
           (chunk) => res.write(chunk),
           messages
         );
@@ -450,7 +620,7 @@ export const streamChat = async (req, res) => {
           modelType,
           prompt,
           imageData,
-          systemPrompt,
+          systemPromptService.generateSystemPrompt(systemPrompt, modelType),
           (chunk) => res.write(chunk),
           messages
         );
@@ -541,8 +711,29 @@ export const streamChat = async (req, res) => {
       stream: true
     };
 
-    if (systemPrompt) {
-      openRouterPayload.messages.push({ role: 'system', content: systemPrompt });
+    // Add tools if available for this model
+    const availableTools = modelConfigService.getToolsForModel(adjustedModelType);
+    if (availableTools && availableTools.length > 0) {
+      openRouterPayload.tools = availableTools.map(tool => ({
+        type: 'function',
+        function: {
+          name: tool.id,
+          description: tool.description,
+          parameters: tool.parameters
+        }
+      }));
+      
+      // Send tools available indicator to frontend
+      res.write(`data: ${JSON.stringify({
+        type: 'tools_available',
+        tools: availableTools.map(t => ({ id: t.id, name: t.name }))
+      })}\n\n`);
+    }
+
+    // Generate enhanced system prompt with tool instructions
+    const enhancedSystemPrompt = systemPromptService.generateSystemPrompt(systemPrompt, adjustedModelType);
+    if (enhancedSystemPrompt) {
+      openRouterPayload.messages.push({ role: 'system', content: enhancedSystemPrompt });
     }
 
     openRouterPayload.messages.push({
@@ -579,9 +770,15 @@ export const streamChat = async (req, res) => {
     );
     
     // Pipe the OpenRouter response directly to the client
-    response.data.on('data', (chunk) => {
+    response.data.on('data', async (chunk) => {
       const data = chunk.toString();
-      // Forward each chunk to the client
+      
+      // Check for tool calls and handle them
+      const toolHandled = await handleToolCall(data, adjustedModelType, (toolData) => {
+        res.write(toolData);
+      });
+      
+      // Forward the original chunk to the client
       res.write(data);
     });
     
@@ -643,7 +840,8 @@ export const handleChat = async (req, res) => {
       console.log(`Detected Anthropic model in handleChat: ${modelType}`);
       
       try {
-        const anthropicResponse = await processAnthropicChat(modelType, prompt, imageData, systemPrompt, messages);
+        const enhancedSystemPrompt = systemPromptService.generateSystemPrompt(systemPrompt, modelType);
+        const anthropicResponse = await processAnthropicChat(modelType, prompt, imageData, enhancedSystemPrompt, messages);
         return res.status(200).json(anthropicResponse);
       } catch (error) {
         console.error('Error processing Anthropic request:', error);
@@ -660,7 +858,8 @@ export const handleChat = async (req, res) => {
       console.log(`Detected OpenAI model in handleChat: ${modelType}`);
       
       try {
-        const openaiResponse = await processOpenAIChat(modelType, prompt, imageData, systemPrompt, messages);
+        const enhancedSystemPrompt = systemPromptService.generateSystemPrompt(systemPrompt, modelType);
+        const openaiResponse = await processOpenAIChat(modelType, prompt, imageData, enhancedSystemPrompt, messages);
         return res.status(200).json(openaiResponse);
       } catch (error) {
         console.error('Error processing OpenAI request:', error);
@@ -677,7 +876,8 @@ export const handleChat = async (req, res) => {
       console.log(`Detected Gemini model in handleChat: ${modelType}`);
       
       try {
-        const geminiResponse = await processGeminiChat(modelType, prompt, imageData, systemPrompt, messages);
+        const enhancedSystemPrompt = systemPromptService.generateSystemPrompt(systemPrompt, modelType);
+        const geminiResponse = await processGeminiChat(modelType, prompt, imageData, enhancedSystemPrompt, messages);
         return res.status(200).json(geminiResponse);
       } catch (error) {
         console.error('Error processing Gemini request:', error);
@@ -766,8 +966,10 @@ export const handleChat = async (req, res) => {
       messages: []
     };
 
-    if (systemPrompt) {
-      openRouterPayload.messages.push({ role: 'system', content: systemPrompt });
+    // Generate enhanced system prompt with tool instructions
+    const enhancedSystemPrompt = systemPromptService.generateSystemPrompt(systemPrompt, adjustedModelType);
+    if (enhancedSystemPrompt) {
+      openRouterPayload.messages.push({ role: 'system', content: enhancedSystemPrompt });
     }
 
     openRouterPayload.messages.push({

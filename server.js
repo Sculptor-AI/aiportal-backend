@@ -18,6 +18,7 @@ import { setupAdmin } from './admin/setup.js';
 import database from './database/connection.js';
 import modelConfigService from './services/modelConfigService.js';
 import rateLimitQueueService from './services/rateLimitQueueService.js';
+import toolsService from './services/toolsService.js';
 
 // Load environment variables
 dotenv.config();
@@ -117,6 +118,10 @@ async function startServer() {
     console.log('🚦 Initializing rate limit queue service...');
     await rateLimitQueueService.initialize();
     
+    // Initialize tools service
+    console.log('🔧 Initializing tools service...');
+    await toolsService.initialize();
+    
     // Setup admin system
     console.log('👤 Setting up admin system...');
     await setupAdmin();
@@ -207,6 +212,7 @@ async function startServer() {
       server.close(async () => {
         await modelConfigService.shutdown();
         await rateLimitQueueService.shutdown();
+        await toolsService.shutdown();
         database.close();
         process.exit(0);
       });
@@ -217,6 +223,7 @@ async function startServer() {
       server.close(async () => {
         await modelConfigService.shutdown();
         await rateLimitQueueService.shutdown();
+        await toolsService.shutdown();
         database.close();
         process.exit(0);
       });

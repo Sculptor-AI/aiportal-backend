@@ -1,0 +1,38 @@
+{
+  "id": "test-tool",
+  "name": "Test Tool",
+  "description": "A simple tool to test the tools system functionality. Use this tool to verify that the tools system is working correctly by sending a test message. The tool will echo back your message along with confirmation that the tools system is operational.",
+  "version": "1.0.0",
+  "enabled": true,
+  "allowedModels": [],
+  "maxExecutionTime": 5000,
+  "requiresAuth": false,
+  "rateLimit": {
+    "requests": 10,
+    "window": "1m"
+  },
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "message": {
+        "type": "string",
+        "description": "A message to echo back. This parameter is required and should contain the test message you want to send through the tools system."
+      }
+    },
+    "required": ["message"]
+  },
+  "returns": {
+    "type": "object",
+    "properties": {
+      "success": {
+        "type": "boolean"
+      },
+      "message": {
+        "type": "string"
+      },
+      "timestamp": {
+        "type": "string"
+      }
+    }
+  }
+}

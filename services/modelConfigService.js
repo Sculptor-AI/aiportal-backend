@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import chokidar from 'chokidar';
+import toolsService from './toolsService.js';
 
 class ModelConfigService {
     constructor() {
@@ -264,6 +265,37 @@ class ModelConfigService {
         };
         
         return amount * (multipliers[unit] || multipliers['hour']);
+    }
+
+    // Tools integration methods
+    getToolsForModel(modelId) {
+        const config = this.getModelConfig(modelId);
+        
+        if (!config || !config.capabilities?.tools || !config.tools?.enabled) {
+            return [];
+        }
+
+        // Get tools from the tools service
+        const availableTools = toolsService.getToolsForModel(modelId);
+        
+        // Filter by model's allowed tools if specified
+        if (config.tools.allowedTools && config.tools.allowedTools.length > 0) {
+            return availableTools.filter(tool => 
+                config.tools.allowedTools.includes(tool.id)
+            );
+        }
+        
+        return availableTools;
+    }
+
+    isToolsEnabledForModel(modelId) {
+        const config = this.getModelConfig(modelId);
+        return config?.capabilities?.tools === true && config?.tools?.enabled === true;
+    }
+
+    getModelToolsConfig(modelId) {
+        const config = this.getModelConfig(modelId);
+        return config?.tools || null;
     }
 
     // Admin methods for model management

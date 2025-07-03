@@ -2,7 +2,7 @@
 
 ## 🚀 Overview
 
-The AI Portal Backend is a secure, scalable "Routerbox" system that provides OpenAI-compatible API endpoints while supporting multiple AI providers (Anthropic, OpenAI, Google Gemini, OpenRouter), custom model definitions, and real-time web search capabilities powered by Brave Search API.
+The AI Portal Backend is a secure, scalable "Routerbox" system that provides OpenAI-compatible API endpoints while supporting multiple AI providers (Anthropic, OpenAI, Google Gemini, OpenRouter), custom model definitions, real-time web search capabilities powered by Brave Search API, and an extensible **Tools System** for function calling and code execution.
 
 ## 📡 Network Access
 
@@ -1113,4 +1113,171 @@ For production use:
 ✅ **Source Attribution**: All web search results include sources  
 ✅ **Enterprise Security**: JWT auth, API keys, rate limiting  
 ✅ **Usage Analytics**: Track model usage and costs  
-✅ **Production Ready**: Docker, PM2, monitoring support
+✅ **Production Ready**: Docker, PM2, monitoring support  
+✅ **Tools System**: Extensible function calling and code execution
+
+---
+
+## 🛠️ Tools System
+
+The AI Portal Backend includes a comprehensive Tools System that allows models to call external functions and execute code during conversations.
+
+### Features
+
+- **Flexible Architecture**: Each tool has its own JSON config and Python controller
+- **Security First**: Tools are disabled by default and require explicit enablement
+- **Per-Model Configuration**: Tools can be enabled/disabled for specific models
+- **Streaming Integration**: Tool usage is streamed to the frontend with real-time status updates
+- **Admin Management**: Full admin panel for managing tools and their configurations
+
+### Tool Structure
+
+Each tool is organized in the `/tools` directory with the following structure:
+
+```
+tools/
+├── config.json                 # Global tools configuration
+├── test-tool/                  # Example tool
+│   ├── config.json            # Tool-specific configuration
+│   └── controller.py          # Python execution controller
+└── [tool-name]/               # Additional tools...
+    ├── config.json
+    └── controller.py
+```
+
+### Admin API Endpoints
+
+#### Tools Management
+
+**Get All Tools**
+```http
+GET /api/admin/tools
+Authorization: Bearer <admin-token>
+```
+
+**Get Tool by ID**
+```http
+GET /api/admin/tools/{toolId}
+Authorization: Bearer <admin-token>
+```
+
+**Enable/Disable Tool**
+```http
+PUT /api/admin/tools/{toolId}/enabled
+Authorization: Bearer <admin-token>
+Content-Type: application/json
+
+{
+  "enabled": true
+}
+```
+
+**Update Tool Configuration**
+```http
+PUT /api/admin/tools/{toolId}
+Authorization: Bearer <admin-token>
+Content-Type: application/json
+
+{
+  "maxExecutionTime": 10000,
+  "allowedModels": ["openai/gpt-4o", "anthropic/claude-3.5-sonnet"]
+}
+```
+
+#### Global Tools Settings
+
+**Get Global Settings**
+```http
+GET /api/admin/tools/global/settings
+Authorization: Bearer <admin-token>
+```
+
+**Update Global Settings**
+```http
+PUT /api/admin/tools/global/settings
+Authorization: Bearer <admin-token>
+Content-Type: application/json
+
+{
+  "enabled": true,
+  "maxConcurrentToolCalls": 10,
+  "toolExecutionTimeout": 60000
+}
+```
+
+**Get Active Tool Executions**
+```http
+GET /api/admin/tools/executions
+Authorization: Bearer <admin-token>
+```
+
+### Model Configuration for Tools
+
+To enable tools for a specific model, add the following to the model's JSON configuration:
+
+```json
+{
+  "capabilities": {
+    "tools": true
+  },
+  "tools": {
+    "enabled": true,
+    "allowedTools": ["test-tool", "python-executor"],
+    "maxConcurrentCalls": 3
+  }
+}
+```
+
+### Streaming Events
+
+When tools are used during a conversation, the following streaming events are sent to the frontend:
+
+#### Tools Available
+```json
+{
+  "type": "tools_available",
+  "tools": [
+    {"id": "test-tool", "name": "Test Tool"}
+  ]
+}
+```
+
+#### Tool Call Started
+```json
+{
+  "type": "tool_call",
+  "tool_name": "test-tool",
+  "tool_id": "call_123",
+  "status": "executing"
+}
+```
+
+#### Tool Execution Result
+```json
+{
+  "type": "tool_result",
+  "tool_name": "test-tool",
+  "tool_id": "call_123",
+  "status": "completed",
+  "result": {
+    "success": true,
+    "message": "Tools system working! Received: Hello World",
+    "timestamp": "2024-07-03T12:00:00.000Z"
+  }
+}
+```
+
+#### Tool Execution Error
+```json
+{
+  "type": "tool_error",
+  "tool_name": "test-tool",
+  "tool_id": "call_123",
+  "status": "error",
+  "error": "Tool execution failed"
+}
+```
+
+### Creating Custom Tools
+
+See `TOOL_GUIDE.md` for detailed instructions on creating custom tools.

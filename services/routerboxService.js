@@ -1,6 +1,6 @@
 import { isGeminiModel, processGeminiChat, streamGeminiChat } from './geminiService.js';
 import { isAnthropicModel, processAnthropicChat, streamAnthropicChat } from './anthropicService.js';
-import { isOpenAIModel, processOpenAIChat, streamOpenAIChat } from './openaiService.js';
+import { isOpenAIModel, processOpenAIChat, streamOpenAIChat, streamOpenAICompatibleChat, processOpenAICompatibleChat } from './openaiService.js';
 import { isOllamaModel, processOllamaChat, streamOllamaChat } from './ollamaService.js';
 import { isLocalModel, processLocalChat, streamLocalChat } from './localInferenceService.js';
 import { CustomModelService } from './customModelService.js';
@@ -18,6 +18,10 @@ export class RouterboxService {
     // First check if model is configured in model config system
     const modelConfig = modelConfigService.getModelConfig(modelId);
     if (modelConfig && modelConfig.enabled) {
+      // Check for routing service override
+      if (modelConfig.routing && modelConfig.routing.service) {
+        return modelConfig.routing.service;
+      }
       return modelConfig.provider;
     }
 
@@ -101,7 +105,13 @@ export class RouterboxService {
     if (streaming) {
       throw new Error('Streaming not supported in this context for OpenAI');
     } else {
-      return await processOpenAIChat(model, prompt, imageData, systemPrompt, conversationHistory);
+      // Check if this is an OpenAI-compatible routing (custom endpoint)
+      const modelConfig = modelConfigService.getModelConfig(model);
+      if (modelConfig && modelConfig.routing && modelConfig.routing.service === 'openai' && modelConfig.routing.endpoint) {
+        return await processOpenAICompatibleChat(model, prompt, imageData, systemPrompt, conversationHistory, modelConfig);
+      } else {
+        return await processOpenAIChat(model, prompt, imageData, systemPrompt, conversationHistory);
+      }
     }
   }
 
@@ -225,10 +235,19 @@ export class RouterboxService {
         return await streamAnthropicChat(model, prompt, imageData, systemPrompt, writeCallback, conversationHistory);
         
       case 'openai':
-        const lastMessageOpenAI = messages[messages.length - 1];
-        const promptOpenAI = lastMessageOpenAI?.content || '';
-        const conversationHistoryOpenAI = messages.slice(0, -1);
-        return await streamOpenAIChat(model, promptOpenAI, imageData, systemPrompt, writeCallback, conversationHistoryOpenAI);
+        // Check if this is an OpenAI-compatible routing (custom endpoint)
+        const modelConfig = modelConfigService.getModelConfig(model);
+        if (modelConfig && modelConfig.routing && modelConfig.routing.service === 'openai' && modelConfig.routing.endpoint) {
+          const lastMessageOpenAI = messages[messages.length - 1];
+          const promptOpenAI = lastMessageOpenAI?.content || '';
+          const conversationHistoryOpenAI = messages.slice(0, -1);
+          return await streamOpenAICompatibleChat(model, promptOpenAI, imageData, systemPrompt, writeCallback, conversationHistoryOpenAI, modelConfig);
+        } else {
+          const lastMessageOpenAI = messages[messages.length - 1];
+          const promptOpenAI = lastMessageOpenAI?.content || '';
+          const conversationHistoryOpenAI = messages.slice(0, -1);
+          return await streamOpenAIChat(model, promptOpenAI, imageData, systemPrompt, writeCallback, conversationHistoryOpenAI);
+        }
         
       case 'gemini':
         const lastMessageGemini = messages[messages.length - 1];

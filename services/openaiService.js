@@ -42,6 +42,114 @@ export const isOpenAIModel = (modelId) => {
 };
 
 /**
+ * Process a non-streaming OpenAI-compatible chat request with custom endpoint
+ */
+export const processOpenAICompatibleChat = async (modelType, prompt, imageData = null, systemPrompt = null, conversationHistory = [], modelConfig = null) => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
+    
+    if (!apiKey) {
+      throw new Error("API key is not configured in environment variables");
+    }
+    
+    // Get endpoint from model config or fallback to OpenAI
+    const baseURL = modelConfig?.routing?.endpoint || 'https://api.openai.com/v1';
+    const modelName = getApiModelName(modelType);
+    
+    console.log(`Processing OpenAI-compatible request with model: ${modelName} at ${baseURL}`);
+    
+    // Create custom OpenAI client with the specified endpoint
+    const openai = new OpenAI({
+      apiKey: apiKey,
+      baseURL: baseURL,
+    });
+    
+    // Get model config parameters or use defaults
+    const parameters = modelConfig?.parameters || {};
+    
+    // Build messages array
+    const messages = [];
+    
+    // Add system prompt if provided
+    if (systemPrompt) {
+      messages.push({
+        role: 'system',
+        content: systemPrompt
+      });
+    }
+    
+    // Add conversation history
+    if (conversationHistory && conversationHistory.length > 0) {
+      messages.push(...conversationHistory);
+    }
+    
+    // Prepare content for the user message
+    let userContent;
+    
+    // Check if we have image data (for vision models)
+    if (imageData && imageData.data && imageData.mediaType && modelConfig?.capabilities?.vision) {
+      userContent = [
+        {
+          type: 'text',
+          text: prompt
+        },
+        {
+          type: 'image_url',
+          image_url: {
+            url: `data:${imageData.mediaType};base64,${imageData.data}`
+          }
+        }
+      ];
+    } else {
+      // Text-only content
+      userContent = prompt;
+    }
+    
+    messages.push({
+      role: 'user',
+      content: userContent
+    });
+    
+    // Build request parameters
+    const requestParams = {
+      model: modelName,
+      messages: messages
+    };
+    
+    // Only add parameters that are explicitly defined in the model config
+    if (parameters.temperature !== undefined) {
+      requestParams.temperature = parameters.temperature;
+    }
+    if (parameters.top_p !== undefined) {
+      requestParams.top_p = parameters.top_p;
+    }
+    if (parameters.max_tokens !== undefined) {
+      requestParams.max_tokens = parameters.max_tokens;
+    }
+    
+    // Make the API call
+    const completion = await openai.chat.completions.create(requestParams);
+    
+    // Format response to match OpenRouter format for consistency
+    return {
+      id: completion.id,
+      object: completion.object,
+      created: completion.created,
+      model: modelType, // Return the requested model ID, not the API model name
+      choices: completion.choices,
+      usage: {
+        prompt_tokens: completion.usage?.prompt_tokens || 0,
+        completion_tokens: completion.usage?.completion_tokens || 0,
+        total_tokens: completion.usage?.total_tokens || 0
+      }
+    };
+  } catch (error) {
+    console.error('Error in OpenAI-compatible chat processing:', error);
+    throw error;
+  }
+};
+
+/**
  * Process a non-streaming OpenAI chat request
  */
 export const processOpenAIChat = async (modelType, prompt, imageData = null, systemPrompt = null, conversationHistory = []) => {
@@ -125,8 +233,84 @@ export const processOpenAIChat = async (modelType, prompt, imageData = null, sys
       requestParams.max_tokens = parameters.max_tokens;
     }
     
+    // Add tools if available for this model
+    const availableTools = modelConfigService.getToolsForModel(modelType);
+    if (availableTools && availableTools.length > 0) {
+      requestParams.tools = availableTools.map(tool => ({
+        type: 'function',
+        function: {
+          name: tool.id,
+          description: tool.description,
+          parameters: tool.parameters
+        }
+      }));
+    }
+    
     // Make the API call
     const completion = await openai.chat.completions.create(requestParams);
+    
+    // Check for tool calls and execute them
+    if (completion.choices?.[0]?.message?.tool_calls) {
+      const toolCalls = completion.choices[0].message.tool_calls;
+      const toolResults = [];
+      
+      for (const toolCall of toolCalls) {
+        if (toolCall.function && toolCall.function.name) {
+          try {
+            // Import toolsService here to avoid circular dependency
+            const toolsService = await import('./toolsService.js');
+            const parameters = JSON.parse(toolCall.function.arguments || '{}');
+            const result = await toolsService.default.executeTool(
+              toolCall.function.name, 
+              parameters, 
+              modelType
+            );
+            toolResults.push({
+              tool_call_id: toolCall.id,
+              role: 'tool',
+              content: JSON.stringify(result)
+            });
+          } catch (error) {
+            console.error(`Error executing tool ${toolCall.function.name}:`, error);
+            toolResults.push({
+              tool_call_id: toolCall.id,
+              role: 'tool',
+              content: JSON.stringify({ error: error.message })
+            });
+          }
+        }
+      }
+      
+      // If we have tool results, make another API call with the results
+      if (toolResults.length > 0) {
+        const messagesWithResults = [
+          ...requestParams.messages,
+          completion.choices[0].message, // Add the assistant's message with tool calls
+          ...toolResults // Add tool results
+        ];
+        
+        const followUpParams = {
+          ...requestParams,
+          messages: messagesWithResults
+        };
+        
+        const followUpCompletion = await openai.chat.completions.create(followUpParams);
+        
+        // Return the follow-up completion
+        return {
+          id: followUpCompletion.id,
+          object: followUpCompletion.object,
+          created: followUpCompletion.created,
+          model: modelType,
+          choices: followUpCompletion.choices,
+          usage: {
+            prompt_tokens: (completion.usage?.prompt_tokens || 0) + (followUpCompletion.usage?.prompt_tokens || 0),
+            completion_tokens: (completion.usage?.completion_tokens || 0) + (followUpCompletion.usage?.completion_tokens || 0),
+            total_tokens: (completion.usage?.total_tokens || 0) + (followUpCompletion.usage?.total_tokens || 0)
+          }
+        };
+      }
+    }
     
     // Format response to match OpenRouter format for consistency
     return {
@@ -143,6 +327,129 @@ export const processOpenAIChat = async (modelType, prompt, imageData = null, sys
     };
   } catch (error) {
     console.error('Error in OpenAI chat processing:', error);
+    throw error;
+  }
+};
+
+/**
+ * Process a streaming OpenAI-compatible chat request with custom endpoint
+ */
+export const streamOpenAICompatibleChat = async (modelType, prompt, imageData = null, systemPrompt = null, onChunk, conversationHistory = [], modelConfig = null) => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
+    
+    if (!apiKey) {
+      throw new Error("API key is not configured in environment variables");
+    }
+    
+    // Get endpoint from model config or fallback to OpenAI
+    const baseURL = modelConfig?.routing?.endpoint || 'https://api.openai.com/v1';
+    const modelName = getApiModelName(modelType);
+    
+    console.log(`Processing streaming OpenAI-compatible request with model: ${modelName} at ${baseURL}`);
+    
+    // Create custom OpenAI client with the specified endpoint
+    const openai = new OpenAI({
+      apiKey: apiKey,
+      baseURL: baseURL,
+    });
+    
+    // Get model config parameters or use defaults
+    const parameters = modelConfig?.parameters || {};
+    
+    // Build messages array
+    const messages = [];
+    
+    // Add system prompt if provided
+    if (systemPrompt) {
+      messages.push({
+        role: 'system',
+        content: systemPrompt
+      });
+    }
+    
+    // Add conversation history
+    if (conversationHistory && conversationHistory.length > 0) {
+      messages.push(...conversationHistory);
+    }
+    
+    // Prepare content for the user message
+    let userContent;
+    
+    // Check if we have image data (for vision models)
+    if (imageData && imageData.data && imageData.mediaType && modelConfig?.capabilities?.vision) {
+      userContent = [
+        {
+          type: 'text',
+          text: prompt
+        },
+        {
+          type: 'image_url',
+          image_url: {
+            url: `data:${imageData.mediaType};base64,${imageData.data}`
+          }
+        }
+      ];
+    } else {
+      // Text-only content
+      userContent = prompt;
+    }
+    
+    messages.push({
+      role: 'user',
+      content: userContent
+    });
+    
+    // Build request parameters
+    const requestParams = {
+      model: modelName,
+      messages: messages,
+      stream: true
+    };
+    
+    // Only add parameters that are explicitly defined in the model config
+    if (parameters.temperature !== undefined) {
+      requestParams.temperature = parameters.temperature;
+    }
+    if (parameters.top_p !== undefined) {
+      requestParams.top_p = parameters.top_p;
+    }
+    if (parameters.max_tokens !== undefined) {
+      requestParams.max_tokens = parameters.max_tokens;
+    }
+    
+    // Make the streaming API call
+    const stream = await openai.chat.completions.create(requestParams);
+    
+    // Process the stream
+    for await (const chunk of stream) {
+      // Format as SSE event
+      const sseData = {
+        id: chunk.id || `openai-compatible-${Date.now()}`,
+        object: chunk.object || 'chat.completion.chunk',
+        created: chunk.created || Math.floor(Date.now() / 1000),
+        model: modelType, // Return the requested model ID, not the API model name
+        choices: chunk.choices || []
+      };
+      
+      // Check if this is the final chunk
+      if (chunk.choices?.[0]?.finish_reason) {
+        onChunk(`data: ${JSON.stringify(sseData)}\n\n`);
+        onChunk('data: [DONE]\n\n');
+        break;
+      } else {
+        // Only send chunks with content or tool calls
+        const hasContent = chunk.choices?.[0]?.delta?.content;
+        const hasToolCalls = chunk.choices?.[0]?.delta?.tool_calls;
+        
+        if (hasContent || hasToolCalls) {
+          onChunk(`data: ${JSON.stringify(sseData)}\n\n`);
+        }
+      }
+    }
+    
+  } catch (error) {
+    console.error('Error in OpenAI-compatible streaming:', error);
     throw error;
   }
 };
@@ -232,6 +539,19 @@ export const streamOpenAIChat = async (modelType, prompt, imageData = null, syst
       requestParams.max_tokens = parameters.max_tokens;
     }
     
+    // Add tools if available for this model
+    const availableTools = modelConfigService.getToolsForModel(modelType);
+    if (availableTools && availableTools.length > 0) {
+      requestParams.tools = availableTools.map(tool => ({
+        type: 'function',
+        function: {
+          name: tool.id,
+          description: tool.description,
+          parameters: tool.parameters
+        }
+      }));
+    }
+    
     // Make the streaming API call
     const stream = await openai.chat.completions.create(requestParams);
     
@@ -247,11 +567,18 @@ export const streamOpenAIChat = async (modelType, prompt, imageData = null, syst
       };
       
       // Check if this is the final chunk
-      if (chunk.choices[0]?.finish_reason) {
+      if (chunk.choices?.[0]?.finish_reason) {
         onChunk(`data: ${JSON.stringify(sseData)}\n\n`);
         onChunk('data: [DONE]\n\n');
+        break;
       } else {
-        onChunk(`data: ${JSON.stringify(sseData)}\n\n`);
+        // Only send chunks with content or tool calls
+        const hasContent = chunk.choices?.[0]?.delta?.content;
+        const hasToolCalls = chunk.choices?.[0]?.delta?.tool_calls;
+        
+        if (hasContent || hasToolCalls) {
+          onChunk(`data: ${JSON.stringify(sseData)}\n\n`);
+        }
       }
     }
     

@@ -75,6 +75,8 @@ export class LocalInferenceService {
             id: `cal/${modelDir}`,
             ...modelInfo
           });
+          
+          console.log(`📁 Found local model: ${modelDir} at ${modelInfo.modelPath}`);
         }
       }
 
@@ -119,7 +121,8 @@ export class LocalInferenceService {
     const model = models.find(m => m.name === cleanModelName);
     
     if (!model) {
-      throw new Error(`Model ${cleanModelName} not found`);
+      console.error(`Available models:`, models.map(m => m.name));
+      throw new Error(`Model ${cleanModelName} not found. Available models: ${models.map(m => m.name).join(', ')}`);
     }
 
     const port = this.basePort + this.runningServers.size;
@@ -326,24 +329,46 @@ export class LocalInferenceService {
             try {
               const parsed = JSON.parse(data);
               
-              // Transform to OpenAI streaming format if needed
-              const streamChunk = {
-                id: `local-${Date.now()}`,
-                object: 'chat.completion.chunk',
-                created: Math.floor(Date.now() / 1000),
-                model: modelType,
-                choices: [{
-                  index: 0,
-                  delta: {
-                    content: parsed.choices?.[0]?.delta?.content || ''
-                  },
-                  finish_reason: parsed.choices?.[0]?.finish_reason || null
-                }]
-              };
+              // Only send chunks that have actual content
+              const content = parsed.choices?.[0]?.delta?.content;
+              if (content !== undefined && content !== null) {
+                // Transform to OpenAI streaming format if needed
+                const streamChunk = {
+                  id: `local-${Date.now()}`,
+                  object: 'chat.completion.chunk',
+                  created: Math.floor(Date.now() / 1000),
+                  model: modelType,
+                  choices: [{
+                    index: 0,
+                    delta: {
+                      content: content
+                    },
+                    finish_reason: parsed.choices?.[0]?.finish_reason || null
+                  }]
+                };
+                
+                writeCallback(`data: ${JSON.stringify(streamChunk)}\n\n`);
+              }
               
-              writeCallback(`data: ${JSON.stringify(streamChunk)}\n\n`);
+              // Send finish reason if present but no content
+              if (parsed.choices?.[0]?.finish_reason && !content) {
+                const streamChunk = {
+                  id: `local-${Date.now()}`,
+                  object: 'chat.completion.chunk',
+                  created: Math.floor(Date.now() / 1000),
+                  model: modelType,
+                  choices: [{
+                    index: 0,
+                    delta: {},
+                    finish_reason: parsed.choices[0].finish_reason
+                  }]
+                };
+                
+                writeCallback(`data: ${JSON.stringify(streamChunk)}\n\n`);
+              }
             } catch (parseError) {
               console.error('Error parsing local model stream chunk:', parseError);
+              console.error('Raw data that failed to parse:', data);
             }
           }
         }
