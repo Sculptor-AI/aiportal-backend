@@ -5,6 +5,7 @@ import { isOllamaModel, processOllamaChat, streamOllamaChat } from './ollamaServ
 import { isLocalModel, processLocalChat, streamLocalChat } from './localInferenceService.js';
 import { CustomModelService } from './customModelService.js';
 import { BraveSearchService } from './braveSearchService.js';
+import modelConfigService from './modelConfigService.js';
 import axios from 'axios';
 
 /**
@@ -14,6 +15,13 @@ import axios from 'axios';
 export class RouterboxService {
   
   static getProviderFromModel(modelId) {
+    // First check if model is configured in model config system
+    const modelConfig = modelConfigService.getModelConfig(modelId);
+    if (modelConfig && modelConfig.enabled) {
+      return modelConfig.provider;
+    }
+
+    // Fallback to legacy detection for backward compatibility
     if (CustomModelService.isCustomModel(modelId)) return 'custom';
     if (isAnthropicModel(modelId)) return 'anthropic';
     if (isOpenAIModel(modelId)) return 'openai';

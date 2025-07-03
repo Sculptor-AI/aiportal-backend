@@ -40,9 +40,12 @@ DNS.1 = localhost
 DNS.2 = 127.0.0.1
 DNS.3 = 172.24.74.81
 DNS.4 = 192.168.1.85
+DNS.5 = api.sculptorai.org
+DNS.6 = sculptorai.org
 IP.1 = 127.0.0.1
 IP.2 = 172.24.74.81
 IP.3 = 192.168.1.85
+IP.4 = 73.118.140.130
 EOF
 
 # Generate certificate

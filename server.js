@@ -12,7 +12,10 @@ import authRoutes from './routes/authRoutes.js';
 import routerboxRoutes from './routes/routerboxRoutes.js';
 import customModelRoutes from './routes/customModelRoutes.js';
 import usageRoutes from './routes/usageRoutes.js';
+import rateLimitRoutes from './routes/rateLimitRoutes.js';
 import database from './database/connection.js';
+import modelConfigService from './services/modelConfigService.js';
+import rateLimitQueueService from './services/rateLimitQueueService.js';
 
 // Load environment variables
 dotenv.config();
@@ -76,6 +79,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/v1/chat', routerboxRoutes); // Main Routerbox endpoint
 app.use('/api/v1/custom-models', customModelRoutes); // Custom model management
 app.use('/api/v1/usage', usageRoutes); // Usage statistics
+app.use('/api/v1/rate-limits', rateLimitRoutes); // Rate limit management
 app.use('/api', apiRouter);
 app.use('/api/v1/images', imageGenerationRoutes);
 app.use('/api/rss', rssRoutes);
@@ -99,8 +103,16 @@ async function startServer() {
   try {
     await database.connect();
     
-    // Check for SSL certificates
-    const useHTTPS = process.env.SSL_CERT_PATH && process.env.SSL_KEY_PATH;
+    // Initialize model configuration service
+    console.log('🔧 Initializing model configuration service...');
+    await modelConfigService.initialize();
+    
+    // Initialize rate limit queue service
+    console.log('🚦 Initializing rate limit queue service...');
+    await rateLimitQueueService.initialize();
+    
+    // Check for SSL certificates - force HTTP if FORCE_HTTP is set
+    let useHTTPS = process.env.FORCE_HTTP ? false : (process.env.SSL_CERT_PATH && process.env.SSL_KEY_PATH);
     let server;
     
     if (useHTTPS) {
@@ -112,19 +124,22 @@ async function startServer() {
         
         server = https.createServer(httpsOptions, app).listen(PORT, '0.0.0.0', () => {
           console.log(`🔒 HTTPS Server running on port ${PORT}`);
-          console.log(`Local access: https://localhost:${PORT}`);
-          console.log(`WSL access: https://172.24.74.81:${PORT}`);
-          console.log(`Network access: https://192.168.1.85:${PORT} (if port forwarded)`);
+          console.log(`Local access: https://localhost:${PORT === 443 ? '' : ':' + PORT}`);
+          console.log(`WSL access: https://172.24.74.81:${PORT === 443 ? '' : ':' + PORT}`);
+          console.log(`Network access: https://192.168.1.85:${PORT === 443 ? '' : ':' + PORT} (if port forwarded)`);
+          console.log(`Public access: https://api.sculptorai.org${PORT === 443 ? '' : ':' + PORT}`);
           console.log(`CORS enabled for: local network and specified domains`);
           console.log('Database connected and ready');
-          console.log(`Health check: https://localhost:${PORT}/health`);
-          console.log(`📖 WSL Network Setup Required - see instructions below`);
-          console.log(`\n🔧 WSL Network Setup:`);
-          console.log(`1. Run in Windows PowerShell as Administrator:`);
-          console.log(`   netsh interface portproxy add v4tov4 listenport=${PORT} listenaddress=0.0.0.0 connectport=${PORT} connectaddress=172.24.74.81`);
-          console.log(`2. Allow through Windows Firewall:`);
-          console.log(`   New-NetFirewallRule -DisplayName "WSL AI Portal" -Direction Inbound -LocalPort ${PORT} -Protocol TCP -Action Allow`);
-          console.log(`3. Then access from other devices: https://192.168.1.85:${PORT}`);
+          console.log(`Health check: https://localhost:${PORT === 443 ? '' : ':' + PORT}/health`);
+          if (PORT !== 443) {
+            console.log(`📖 WSL Network Setup Required - see instructions below`);
+            console.log(`\n🔧 WSL Network Setup:`);
+            console.log(`1. Run in Windows PowerShell as Administrator:`);
+            console.log(`   netsh interface portproxy add v4tov4 listenport=${PORT} listenaddress=0.0.0.0 connectport=${PORT} connectaddress=172.24.74.81`);
+            console.log(`2. Allow through Windows Firewall:`);
+            console.log(`   New-NetFirewallRule -DisplayName "WSL AI Portal" -Direction Inbound -LocalPort ${PORT} -Protocol TCP -Action Allow`);
+            console.log(`3. Then access from other devices: https://192.168.1.85:${PORT}`);
+          }
         });
       } catch (sslError) {
         console.error('❌ SSL certificate error:', sslError.message);
@@ -138,28 +153,37 @@ async function startServer() {
       console.log('💡 To enable HTTPS, set SSL_CERT_PATH and SSL_KEY_PATH environment variables');
       
       server = app.listen(PORT, '0.0.0.0', () => {
-        console.log(`Server running on port ${PORT}`);
-        console.log(`Local access: http://localhost:${PORT}`);
-        console.log(`WSL access: http://172.24.74.81:${PORT}`);
-        console.log(`Network access: http://192.168.1.85:${PORT} (if port forwarded)`);
+        console.log(`⚠️  HTTP Server running on port ${PORT} (INSECURE)`);
+        console.log(`Local access: http://localhost:${PORT === 80 ? '' : ':' + PORT}`);
+        console.log(`WSL access: http://172.24.74.81:${PORT === 80 ? '' : ':' + PORT}`);
+        console.log(`Network access: http://192.168.1.85:${PORT === 80 ? '' : ':' + PORT} (if port forwarded)`);
         console.log(`CORS enabled for: local network and specified domains`);
         console.log('Database connected and ready');
-        console.log(`Health check: http://localhost:${PORT}/health`);
-        console.log(`📖 WSL Network Setup Required - see instructions below`);
-        console.log(`\n🔧 WSL Network Setup:`);
-        console.log(`1. Run in Windows PowerShell as Administrator:`);
-        console.log(`   netsh interface portproxy add v4tov4 listenport=${PORT} listenaddress=0.0.0.0 connectport=${PORT} connectaddress=172.24.74.81`);
-        console.log(`2. Allow through Windows Firewall:`);
-        console.log(`   New-NetFirewallRule -DisplayName "WSL AI Portal" -Direction Inbound -LocalPort ${PORT} -Protocol TCP -Action Allow`);
-        console.log(`3. Then access from other devices: http://192.168.1.85:${PORT}`);
+        console.log(`Health check: http://localhost:${PORT === 80 ? '' : ':' + PORT}/health`);
+        if (PORT !== 80) {
+          console.log(`📖 WSL Network Setup Required - see instructions below`);
+          console.log(`\n🔧 WSL Network Setup:`);
+          console.log(`1. Run in Windows PowerShell as Administrator:`);
+          console.log(`   netsh interface portproxy add v4tov4 listenport=${PORT} listenaddress=0.0.0.0 connectport=${PORT} connectaddress=172.24.74.81`);
+          console.log(`2. Allow through Windows Firewall:`);
+          console.log(`   New-NetFirewallRule -DisplayName "WSL AI Portal" -Direction Inbound -LocalPort ${PORT} -Protocol TCP -Action Allow`);
+          console.log(`3. Then access from other devices: http://192.168.1.85:${PORT}`);
+        }
       });
     }
 
     server.on('error', (err) => {
       if (err.code === 'EADDRINUSE') {
         console.error(`❌ Port ${PORT} is already in use. Try a different port:`);
-        console.error(`   PORT=3001 npm run start:direct`);
-        console.error(`   PORT=3002 npm run start:direct`);
+        console.error(`   PORT=3001 npm start`);
+        console.error(`   PORT=3002 npm start`);
+        process.exit(1);
+      } else if (err.code === 'EACCES' && PORT < 1024) {
+        console.error(`❌ Permission denied for port ${PORT}. Privileged ports (< 1024) require root access.`);
+        console.error(`💡 Solutions:`);
+        console.error(`   1. Run with sudo: sudo npm start`);
+        console.error(`   2. Use a different port: PORT=3000 npm start`);
+        console.error(`   3. Use port forwarding: sudo iptables -t nat -A PREROUTING -p tcp --dport 443 -j REDIRECT --to-port 3000`);
         process.exit(1);
       } else {
         console.error('❌ Server error:', err);
@@ -170,7 +194,9 @@ async function startServer() {
     // Graceful shutdown
     process.on('SIGINT', () => {
       console.log('\n🛑 Shutting down gracefully...');
-      server.close(() => {
+      server.close(async () => {
+        await modelConfigService.shutdown();
+        await rateLimitQueueService.shutdown();
         database.close();
         process.exit(0);
       });
@@ -178,7 +204,9 @@ async function startServer() {
 
     process.on('SIGTERM', () => {
       console.log('\n🛑 Shutting down gracefully...');
-      server.close(() => {
+      server.close(async () => {
+        await modelConfigService.shutdown();
+        await rateLimitQueueService.shutdown();
         database.close();
         process.exit(0);
       });

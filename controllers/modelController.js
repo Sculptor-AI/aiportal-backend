@@ -4,6 +4,7 @@ import { getAnthropicModels } from '../services/anthropicService.js';
 import { getOpenAIModels } from '../services/openaiService.js';
 import { OllamaService } from '../services/ollamaService.js';
 import { LocalInferenceService } from '../services/localInferenceService.js';
+import modelConfigService from '../services/modelConfigService.js';
 
 /**
  * Get the list of available models from OpenRouter
@@ -13,6 +14,25 @@ import { LocalInferenceService } from '../services/localInferenceService.js';
 export const getModels = async (req, res) => {
   try {
     let allModels = [];
+    
+    // Initialize model config service
+    await modelConfigService.initialize();
+    
+    // Get models from configuration first
+    const configuredModels = modelConfigService.getAllModels();
+    if (configuredModels.length > 0) {
+      allModels = [...allModels, ...configuredModels.map(model => ({
+        id: model.id,
+        name: model.displayName,
+        provider: model.provider,
+        source: 'configured',
+        capabilities: model.capabilities || [],
+        pricing: model.pricing || {},
+        isBackendModel: true,
+        isConfigured: true
+      }))];
+      console.log(`Added ${configuredModels.length} configured models`);
+    }
     
     // Get Anthropic models if API key is configured
     if (process.env.ANTHROPIC_API_KEY) {

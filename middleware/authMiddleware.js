@@ -105,3 +105,32 @@ export const optionalAuth = async (req, res, next) => {
     next();
   }
 };
+
+export const requireAdmin = async (req, res, next) => {
+  try {
+    // For now, treat all authenticated users as admins
+    // In a production system, you'd check user.role or similar
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
+    
+    // TODO: Add proper admin role checking when user roles are implemented
+    // if (req.user.role !== 'admin') {
+    //   return res.status(403).json({
+    //     success: false,
+    //     error: 'Admin access required'
+    //   });
+    // }
+    
+    next();
+  } catch (error) {
+    console.error('Admin middleware error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Authorization error'
+    });
+  }
+};

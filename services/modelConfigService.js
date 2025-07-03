@@ -1,0 +1,245 @@
+import fs from 'fs/promises';
+import path from 'path';
+import chokidar from 'chokidar';
+
+class ModelConfigService {
+    constructor() {
+        this.configPath = path.join(process.cwd(), 'model_config');
+        this.globalConfig = null;
+        this.modelConfigs = new Map();
+        this.watcher = null;
+        this.initialized = false;
+    }
+
+    async initialize() {
+        if (this.initialized) return;
+        
+        await this.loadGlobalConfig();
+        await this.loadAllModelConfigs();
+        
+        if (this.globalConfig?.hotReload) {
+            this.setupFileWatcher();
+        }
+        
+        this.initialized = true;
+        console.log(`✅ Model configuration service initialized with ${this.modelConfigs.size} models`);
+    }
+
+    async loadGlobalConfig() {
+        try {
+            const configPath = path.join(this.configPath, 'config.json');
+            const configData = await fs.readFile(configPath, 'utf-8');
+            this.globalConfig = JSON.parse(configData);
+        } catch (error) {
+            console.error('❌ Failed to load global config:', error.message);
+            // Use default configuration
+            this.globalConfig = {
+                rateLimitingEnabled: true,
+                defaultGlobalRateLimit: { requests: 1000, window: { amount: 1, unit: 'hour' } },
+                defaultUserRateLimit: { requests: 50, window: { amount: 6, unit: 'hours' } },
+                queueConfig: { enabled: true, maxQueueSize: 1000, processingTimeout: 30000, retryAttempts: 3 },
+                hotReload: false
+            };
+        }
+    }
+
+    async loadAllModelConfigs() {
+        const modelsPath = path.join(this.configPath, 'models');
+        
+        try {
+            const providers = await fs.readdir(modelsPath);
+            
+            for (const provider of providers) {
+                const providerPath = path.join(modelsPath, provider);
+                const stat = await fs.stat(providerPath);
+                
+                if (stat.isDirectory()) {
+                    await this.loadProviderModels(provider, providerPath);
+                }
+            }
+        } catch (error) {
+            console.error('❌ Failed to load model configs:', error.message);
+        }
+    }
+
+    async loadProviderModels(provider, providerPath) {
+        try {
+            const files = await fs.readdir(providerPath);
+            
+            for (const file of files) {
+                if (file.endsWith('.json')) {
+                    const filePath = path.join(providerPath, file);
+                    const configData = await fs.readFile(filePath, 'utf-8');
+                    const config = JSON.parse(configData);
+                    
+                    // Validate and enhance config
+                    this.validateModelConfig(config);
+                    this.enhanceModelConfig(config, provider);
+                    
+                    this.modelConfigs.set(config.id, config);
+                    console.log(`📁 Loaded model: ${config.id} (${config.displayName})`);
+                }
+            }
+        } catch (error) {
+            console.error(`❌ Failed to load ${provider} models:`, error.message);
+        }
+    }
+
+    validateModelConfig(config) {
+        const required = ['id', 'displayName', 'provider', 'apiModel', 'enabled'];
+        for (const field of required) {
+            if (!config[field] && field !== 'enabled') {
+                throw new Error(`Missing required field: ${field}`);
+            }
+        }
+    }
+
+    enhanceModelConfig(config, provider) {
+        // Apply defaults from global config
+        if (!config.globalRateLimit) {
+            config.globalRateLimit = { ...this.globalConfig.defaultGlobalRateLimit };
+        }
+        
+        if (!config.userRateLimit) {
+            config.userRateLimit = { ...this.globalConfig.defaultUserRateLimit };
+        }
+        
+        // Ensure provider matches directory
+        config.provider = provider;
+        
+        // Add timestamp for cache invalidation
+        config._loadedAt = Date.now();
+    }
+
+    setupFileWatcher() {
+        this.watcher = chokidar.watch(this.configPath, {
+            ignored: /(^|[\/\\])\../,
+            persistent: true,
+            ignoreInitial: true
+        });
+
+        this.watcher
+            .on('change', async (filePath) => {
+                console.log(`🔄 Config file changed: ${filePath}`);
+                if (filePath.includes('config.json')) {
+                    await this.loadGlobalConfig();
+                } else if (filePath.endsWith('.json')) {
+                    await this.reloadModelConfig(filePath);
+                }
+            })
+            .on('add', async (filePath) => {
+                if (filePath.endsWith('.json')) {
+                    console.log(`➕ New config file: ${filePath}`);
+                    await this.reloadModelConfig(filePath);
+                }
+            })
+            .on('unlink', (filePath) => {
+                if (filePath.endsWith('.json')) {
+                    console.log(`➖ Config file removed: ${filePath}`);
+                    const modelId = this.getModelIdFromPath(filePath);
+                    if (modelId) {
+                        this.modelConfigs.delete(modelId);
+                    }
+                }
+            });
+    }
+
+    async reloadModelConfig(filePath) {
+        try {
+            const configData = await fs.readFile(filePath, 'utf-8');
+            const config = JSON.parse(configData);
+            const provider = this.getProviderFromPath(filePath);
+            
+            this.validateModelConfig(config);
+            this.enhanceModelConfig(config, provider);
+            
+            this.modelConfigs.set(config.id, config);
+            console.log(`🔄 Reloaded model: ${config.id}`);
+        } catch (error) {
+            console.error(`❌ Failed to reload config ${filePath}:`, error.message);
+        }
+    }
+
+    getProviderFromPath(filePath) {
+        const parts = filePath.split(path.sep);
+        const modelsIndex = parts.findIndex(part => part === 'models');
+        return modelsIndex >= 0 && modelsIndex < parts.length - 1 ? parts[modelsIndex + 1] : 'unknown';
+    }
+
+    getModelIdFromPath(filePath) {
+        // Extract model ID from existing configs by matching file path
+        for (const [id, config] of this.modelConfigs) {
+            if (filePath.includes(config.provider) && filePath.includes(id)) {
+                return id;
+            }
+        }
+        return null;
+    }
+
+    // Public API methods
+    getAllModels() {
+        return Array.from(this.modelConfigs.values())
+            .filter(config => config.enabled)
+            .map(config => ({
+                id: config.id,
+                displayName: config.displayName,
+                provider: config.provider,
+                capabilities: config.capabilities || {},
+                pricing: config.pricing || {}
+            }));
+    }
+
+    getModelConfig(modelId) {
+        return this.modelConfigs.get(modelId);
+    }
+
+    isRateLimitingEnabled() {
+        return this.globalConfig?.rateLimitingEnabled !== false;
+    }
+
+    getGlobalConfig() {
+        return this.globalConfig;
+    }
+
+    getQueueConfig() {
+        return this.globalConfig?.queueConfig || {};
+    }
+
+    // Rate limit helpers
+    getModelGlobalRateLimit(modelId) {
+        const config = this.getModelConfig(modelId);
+        return config?.globalRateLimit || this.globalConfig?.defaultGlobalRateLimit;
+    }
+
+    getModelUserRateLimit(modelId) {
+        const config = this.getModelConfig(modelId);
+        return config?.userRateLimit || this.globalConfig?.defaultUserRateLimit;
+    }
+
+    // Convert time window to milliseconds
+    getWindowDurationMs(window) {
+        const { amount, unit } = window;
+        const multipliers = {
+            'second': 1000,
+            'seconds': 1000,
+            'minute': 60 * 1000,
+            'minutes': 60 * 1000,
+            'hour': 60 * 60 * 1000,
+            'hours': 60 * 60 * 1000,
+            'day': 24 * 60 * 60 * 1000,
+            'days': 24 * 60 * 60 * 1000
+        };
+        
+        return amount * (multipliers[unit] || multipliers['hour']);
+    }
+
+    async shutdown() {
+        if (this.watcher) {
+            await this.watcher.close();
+        }
+        console.log('🔽 Model configuration service shutdown');
+    }
+}
+
+// Export singleton instance
+export default new ModelConfigService();
