@@ -76,8 +76,8 @@ export class AuthService {
     const passwordHash = await this.hashPassword(password);
     
     const result = await database.run(
-      'INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)',
-      [username, email, passwordHash]
+      'INSERT INTO users (username, email, password_hash, status) VALUES (?, ?, ?, ?)',
+      [username, email, passwordHash, 'pending']
     );
 
     return result.lastID;
@@ -85,12 +85,17 @@ export class AuthService {
 
   static async authenticateUser(username, password) {
     const user = await database.get(
-      'SELECT id, username, password_hash, is_active FROM users WHERE username = ? AND is_active = 1',
+      'SELECT id, username, password_hash, status, is_active FROM users WHERE username = ? AND is_active = 1',
       [username]
     );
 
     if (!user) {
       throw new Error('Invalid credentials');
+    }
+
+    // Check if user is pending
+    if (user.status === 'pending') {
+      throw new Error('Account is pending approval. Please contact an administrator.');
     }
 
     const isValidPassword = await this.verifyPassword(password, user.password_hash);
@@ -106,7 +111,8 @@ export class AuthService {
 
     return {
       id: user.id,
-      username: user.username
+      username: user.username,
+      status: user.status
     };
   }
 
@@ -146,6 +152,16 @@ export class AuthService {
   }
 
   static async generateApiKey(userId, keyName) {
+    // Check user status first
+    const user = await database.get('SELECT status FROM users WHERE id = ? AND is_active = 1', [userId]);
+    if (!user) {
+      throw new Error('User not found');
+    }
+    
+    if (user.status === 'pending') {
+      throw new Error('Cannot generate API keys for pending users');
+    }
+
     const apiKey = 'ak_' + crypto.randomBytes(32).toString('hex');
     const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
     const keyPrefix = apiKey.substring(0, 8);
@@ -162,13 +178,18 @@ export class AuthService {
     const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
     
     const result = await database.get(`
-      SELECT ak.user_id, u.username, ak.id as key_id
+      SELECT ak.user_id, u.username, u.status, ak.id as key_id
       FROM api_keys ak 
       JOIN users u ON ak.user_id = u.id 
       WHERE ak.key_hash = ? AND ak.is_active = 1 AND u.is_active = 1
     `, [keyHash]);
 
     if (result) {
+      // Check if user is pending
+      if (result.status === 'pending') {
+        return null; // Don't allow API access for pending users
+      }
+
       // Update last used timestamp
       await database.run(
         'UPDATE api_keys SET last_used = CURRENT_TIMESTAMP WHERE id = ?',

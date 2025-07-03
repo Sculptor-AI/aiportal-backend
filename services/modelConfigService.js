@@ -266,6 +266,102 @@ class ModelConfigService {
         return amount * (multipliers[unit] || multipliers['hour']);
     }
 
+    // Admin methods for model management
+    async getModelById(modelId) {
+        return this.getModelConfig(modelId);
+    }
+
+    async getAllModelsAdmin() {
+        return Array.from(this.modelConfigs.values()).map(config => ({
+            id: config.fullId || config.id,
+            originalId: config.originalId || config.id,
+            displayName: config.displayName,
+            provider: config.provider,
+            apiModel: config.apiModel,
+            enabled: config.enabled,
+            capabilities: config.capabilities || {},
+            globalRateLimit: config.globalRateLimit,
+            userRateLimit: config.userRateLimit,
+            _loadedAt: config._loadedAt
+        }));
+    }
+
+    async createModel(modelConfig) {
+        this.validateModelConfig(modelConfig);
+        
+        const provider = modelConfig.provider;
+        const providerPath = path.join(this.configPath, 'models', provider);
+        
+        // Ensure provider directory exists
+        try {
+            await fs.mkdir(providerPath, { recursive: true });
+        } catch (error) {
+            // Directory already exists
+        }
+        
+        const filePath = path.join(providerPath, `${modelConfig.id}.json`);
+        
+        // Check if model already exists
+        try {
+            await fs.access(filePath);
+            throw new Error('Model already exists');
+        } catch (error) {
+            if (error.code !== 'ENOENT') {
+                throw error;
+            }
+        }
+        
+        // Enhance the config
+        this.enhanceModelConfig(modelConfig, provider);
+        
+        // Write to file
+        await fs.writeFile(filePath, JSON.stringify(modelConfig, null, 2));
+        
+        // Add to memory
+        const fullId = `${provider}/${modelConfig.id}`;
+        this.modelConfigs.set(fullId, modelConfig);
+        
+        console.log(`➕ Created model: ${fullId}`);
+        return fullId;
+    }
+
+    async updateModel(modelId, updates) {
+        const config = this.getModelConfig(modelId);
+        if (!config) {
+            throw new Error('Model not found');
+        }
+        
+        // Merge updates
+        const updatedConfig = { ...config, ...updates };
+        this.validateModelConfig(updatedConfig);
+        this.enhanceModelConfig(updatedConfig, config.provider);
+        
+        // Write to file
+        const filePath = path.join(this.configPath, 'models', config.provider, `${config.originalId || config.id}.json`);
+        await fs.writeFile(filePath, JSON.stringify(updatedConfig, null, 2));
+        
+        // Update in memory
+        this.modelConfigs.set(modelId, updatedConfig);
+        
+        console.log(`🔄 Updated model: ${modelId}`);
+    }
+
+    async deleteModel(modelId) {
+        const config = this.getModelConfig(modelId);
+        if (!config) {
+            throw new Error('Model not found');
+        }
+        
+        // Remove file
+        const filePath = path.join(this.configPath, 'models', config.provider, `${config.originalId || config.id}.json`);
+        await fs.unlink(filePath);
+        
+        // Remove from memory
+        this.modelConfigs.delete(modelId);
+        
+        console.log(`🗑️ Deleted model: ${modelId}`);
+    }
+
     async shutdown() {
         if (this.watcher) {
             await this.watcher.close();

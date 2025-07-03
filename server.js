@@ -13,6 +13,8 @@ import routerboxRoutes from './routes/routerboxRoutes.js';
 import customModelRoutes from './routes/customModelRoutes.js';
 import usageRoutes from './routes/usageRoutes.js';
 import rateLimitRoutes from './routes/rateLimitRoutes.js';
+import adminRoutes from './admin/adminRoutes.js';
+import { setupAdmin } from './admin/setup.js';
 import database from './database/connection.js';
 import modelConfigService from './services/modelConfigService.js';
 import rateLimitQueueService from './services/rateLimitQueueService.js';
@@ -76,6 +78,7 @@ app.options('*', cors(corsOptions));
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes); // Admin API endpoints
 app.use('/api/v1/chat', routerboxRoutes); // Main Routerbox endpoint
 app.use('/api/v1/custom-models', customModelRoutes); // Custom model management
 app.use('/api/v1/usage', usageRoutes); // Usage statistics
@@ -83,6 +86,9 @@ app.use('/api/v1/rate-limits', rateLimitRoutes); // Rate limit management
 app.use('/api', apiRouter);
 app.use('/api/v1/images', imageGenerationRoutes);
 app.use('/api/rss', rssRoutes);
+
+// Serve admin portal static files
+app.use('/admin/portal', express.static(path.join(process.cwd(), 'admin/portal')));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -110,6 +116,10 @@ async function startServer() {
     // Initialize rate limit queue service
     console.log('🚦 Initializing rate limit queue service...');
     await rateLimitQueueService.initialize();
+    
+    // Setup admin system
+    console.log('👤 Setting up admin system...');
+    await setupAdmin();
     
     // Check for SSL certificates - force HTTP if FORCE_HTTP is set
     let useHTTPS = process.env.FORCE_HTTP ? false : (process.env.SSL_CERT_PATH && process.env.SSL_KEY_PATH);
