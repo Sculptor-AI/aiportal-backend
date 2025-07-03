@@ -1,0 +1,24 @@
+{
+  "rateLimitingEnabled": true,
+  "defaultGlobalRateLimit": {
+    "requests": 1000,
+    "window": {
+      "amount": 1,
+      "unit": "hour"
+    }
+  },
+  "defaultUserRateLimit": {
+    "requests": 50,
+    "window": {
+      "amount": 6,
+      "unit": "hours"
+    }
+  },
+  "queueConfig": {
+    "enabled": true,
+    "maxQueueSize": 1000,
+    "processingTimeout": 30000,
+    "retryAttempts": 3
+  },
+  "hotReload": true
+}

@@ -1,0 +1,38 @@
+{
+  "id": "gpt-4o-mini",
+  "displayName": "GPT-4o Mini",
+  "provider": "openai",
+  "apiModel": "gpt-4o-mini-2024-07-18",
+  "enabled": true,
+  "routing": {
+    "service": "openai",
+    "endpoint": "https://api.openai.com/v1/chat/completions"
+  },
+  "globalRateLimit": {
+    "requests": 2000,
+    "window": {
+      "amount": 1,
+      "unit": "hour"
+    }
+  },
+  "userRateLimit": {
+    "requests": 100,
+    "window": {
+      "amount": 6,
+      "unit": "hours"
+    }
+  },
+  "parameters": {
+    "temperature": 0.7,
+    "max_tokens": 16384,
+    "top_p": 1.0,
+    "frequency_penalty": 0,
+    "presence_penalty": 0
+  },
+  "capabilities": {
+    "streaming": true,
+    "vision": true,
+    "functionCalling": true,
+    "webSearch": true
+  }
+}

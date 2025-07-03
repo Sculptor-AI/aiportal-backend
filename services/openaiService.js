@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import modelConfigService from './modelConfigService.js';
 
 /**
  * Initialize OpenAI client
@@ -16,24 +17,28 @@ const initializeOpenAIClient = () => {
 };
 
 /**
- * Map frontend model IDs to OpenAI model names
+ * Get API model name from model config
  */
-const mapToOpenAIModel = (modelId) => {
-  const modelMappings = {
-    'gpt-4o': 'gpt-4o',
-    'openai/gpt-4o': 'gpt-4o',
-    'o3': 'o3',
-    'openai/o3': 'o3',
-  };
-  
-  return modelMappings[modelId] || modelId;
+const getApiModelName = (modelId) => {
+  const modelConfig = modelConfigService.getModelConfig(modelId);
+  if (modelConfig && modelConfig.apiModel) {
+    return modelConfig.apiModel;
+  }
+  // Fallback to the model ID if not found in config
+  return modelId;
 };
 
 /**
  * Check if a model is an OpenAI model
  */
 export const isOpenAIModel = (modelId) => {
-  return modelId.startsWith('gpt-') || modelId.startsWith('openai/gpt');
+  // First check model config
+  const modelConfig = modelConfigService.getModelConfig(modelId);
+  if (modelConfig && modelConfig.provider === 'openai') {
+    return true;
+  }
+  // Fallback to prefix check for backward compatibility
+  return modelId.startsWith('gpt-') || modelId.startsWith('openai/gpt') || modelId.startsWith('o3') || modelId.startsWith('openai/o3') || modelId.startsWith('o4') || modelId.startsWith('openai/o4');
 };
 
 /**
@@ -42,9 +47,13 @@ export const isOpenAIModel = (modelId) => {
 export const processOpenAIChat = async (modelType, prompt, imageData = null, systemPrompt = null, conversationHistory = []) => {
   try {
     const openai = initializeOpenAIClient();
-    const modelName = mapToOpenAIModel(modelType);
+    const modelName = getApiModelName(modelType);
     
     console.log(`Processing OpenAI request with model: ${modelName}`);
+    
+    // Get model config to retrieve parameters
+    const modelConfig = modelConfigService.getModelConfig(modelType);
+    const parameters = modelConfig?.parameters || {};
     
     // Build messages array
     const messages = [];
@@ -66,7 +75,7 @@ export const processOpenAIChat = async (modelType, prompt, imageData = null, sys
     let userContent;
     
     // Check if we have image data (for vision models)
-    if (imageData && imageData.data && imageData.mediaType && modelName === 'gpt-4o') {
+    if (imageData && imageData.data && imageData.mediaType && modelConfig?.capabilities?.vision) {
       userContent = [
         {
           type: 'text',
@@ -89,22 +98,48 @@ export const processOpenAIChat = async (modelType, prompt, imageData = null, sys
       content: userContent
     });
     
-    // Make the API call
-    const completion = await openai.chat.completions.create({
+    // Build request parameters
+    const requestParams = {
       model: modelName,
-      messages: messages,
-      temperature: 0.7,
-      max_tokens: 4096,
-    });
+      messages: messages
+    };
+    
+    // Only add parameters that are explicitly defined in the model config
+    if (parameters.temperature !== undefined) {
+      requestParams.temperature = parameters.temperature;
+    }
+    if (parameters.top_p !== undefined) {
+      requestParams.top_p = parameters.top_p;
+    }
+    if (parameters.frequency_penalty !== undefined) {
+      requestParams.frequency_penalty = parameters.frequency_penalty;
+    }
+    if (parameters.presence_penalty !== undefined) {
+      requestParams.presence_penalty = parameters.presence_penalty;
+    }
+    
+    // Handle max_tokens vs max_completion_tokens based on model requirements
+    if (parameters.max_completion_tokens !== undefined) {
+      requestParams.max_completion_tokens = parameters.max_completion_tokens;
+    } else if (parameters.max_tokens !== undefined) {
+      requestParams.max_tokens = parameters.max_tokens;
+    }
+    
+    // Make the API call
+    const completion = await openai.chat.completions.create(requestParams);
     
     // Format response to match OpenRouter format for consistency
     return {
       id: completion.id,
       object: completion.object,
       created: completion.created,
-      model: completion.model,
+      model: modelType, // Return the requested model ID, not the API model name
       choices: completion.choices,
-      usage: completion.usage
+      usage: {
+        prompt_tokens: completion.usage?.prompt_tokens || 0,
+        completion_tokens: completion.usage?.completion_tokens || 0,
+        total_tokens: completion.usage?.total_tokens || 0
+      }
     };
   } catch (error) {
     console.error('Error in OpenAI chat processing:', error);
@@ -118,9 +153,13 @@ export const processOpenAIChat = async (modelType, prompt, imageData = null, sys
 export const streamOpenAIChat = async (modelType, prompt, imageData = null, systemPrompt = null, onChunk, conversationHistory = []) => {
   try {
     const openai = initializeOpenAIClient();
-    const modelName = mapToOpenAIModel(modelType);
+    const modelName = getApiModelName(modelType);
     
     console.log(`Processing streaming OpenAI request with model: ${modelName}`);
+    
+    // Get model config to retrieve parameters
+    const modelConfig = modelConfigService.getModelConfig(modelType);
+    const parameters = modelConfig?.parameters || {};
     
     // Build messages array
     const messages = [];
@@ -142,7 +181,7 @@ export const streamOpenAIChat = async (modelType, prompt, imageData = null, syst
     let userContent;
     
     // Check if we have image data (for vision models)
-    if (imageData && imageData.data && imageData.mediaType && modelName === 'gpt-4o') {
+    if (imageData && imageData.data && imageData.mediaType && modelConfig?.capabilities?.vision) {
       userContent = [
         {
           type: 'text',
@@ -165,24 +204,46 @@ export const streamOpenAIChat = async (modelType, prompt, imageData = null, syst
       content: userContent
     });
     
-    // Make the streaming API call
-    const stream = await openai.chat.completions.create({
+    // Build request parameters
+    const requestParams = {
       model: modelName,
       messages: messages,
-      temperature: 0.7,
-      max_tokens: 4096,
-      stream: true,
-    });
+      stream: true
+    };
+    
+    // Only add parameters that are explicitly defined in the model config
+    if (parameters.temperature !== undefined) {
+      requestParams.temperature = parameters.temperature;
+    }
+    if (parameters.top_p !== undefined) {
+      requestParams.top_p = parameters.top_p;
+    }
+    if (parameters.frequency_penalty !== undefined) {
+      requestParams.frequency_penalty = parameters.frequency_penalty;
+    }
+    if (parameters.presence_penalty !== undefined) {
+      requestParams.presence_penalty = parameters.presence_penalty;
+    }
+    
+    // Handle max_tokens vs max_completion_tokens based on model requirements
+    if (parameters.max_completion_tokens !== undefined) {
+      requestParams.max_completion_tokens = parameters.max_completion_tokens;
+    } else if (parameters.max_tokens !== undefined) {
+      requestParams.max_tokens = parameters.max_tokens;
+    }
+    
+    // Make the streaming API call
+    const stream = await openai.chat.completions.create(requestParams);
     
     // Process the stream
     for await (const chunk of stream) {
       // Format as SSE event
       const sseData = {
-        id: chunk.id,
-        object: chunk.object,
-        created: chunk.created,
-        model: chunk.model,
-        choices: chunk.choices
+        id: chunk.id || `openai-${Date.now()}`,
+        object: chunk.object || 'chat.completion.chunk',
+        created: chunk.created || Math.floor(Date.now() / 1000),
+        model: modelType, // Return the requested model ID, not the API model name
+        choices: chunk.choices || []
       };
       
       // Check if this is the final chunk
@@ -212,10 +273,6 @@ export const getOpenAIModels = () => {
       source: 'openai',
       context_length: 128000,
       capabilities: ['text', 'vision'],
-      pricing: {
-        prompt: 0.005,
-        completion: 0.015
-      },
       isBackendModel: true
     },
     {
@@ -225,10 +282,6 @@ export const getOpenAIModels = () => {
       source: 'openai',
       context_length: 128000,
       capabilities: ['text', 'vision'],
-      pricing: {
-        prompt: 0.00015,
-        completion: 0.0006
-      },
       isBackendModel: true
     },
     {
@@ -236,12 +289,8 @@ export const getOpenAIModels = () => {
       name: 'ChatGPT o3',
       provider: 'openai',
       source: 'openai',
-      context_length: 128000,
+      context_length: 200000,
       capabilities: ['text', 'reasoning'],
-      pricing: {
-        prompt: 0.06,
-        completion: 0.24
-      },
       isBackendModel: true
     },
     {
@@ -249,12 +298,17 @@ export const getOpenAIModels = () => {
       name: 'ChatGPT o3-mini',
       provider: 'openai',
       source: 'openai',
-      context_length: 128000,
+      context_length: 65536,
       capabilities: ['text', 'reasoning'],
-      pricing: {
-        prompt: 0.015,
-        completion: 0.06
-      },
+      isBackendModel: true
+    },
+    {
+      id: 'openai/o4-mini',
+      name: 'o4 Mini',
+      provider: 'openai',
+      source: 'openai',
+      context_length: 16384,
+      capabilities: ['text', 'reasoning'],
       isBackendModel: true
     }
   ];

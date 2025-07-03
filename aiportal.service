@@ -1,0 +1,21 @@
+[Unit]
+Description=AI Portal API Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/kellen/aiportal/backend
+Environment=NODE_ENV=production
+Environment=PORT=443
+Environment=SSL_KEY_PATH=./ssl/server.key
+Environment=SSL_CERT_PATH=./ssl/server.crt
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=aiportal
+
+[Install]
+WantedBy=multi-user.target

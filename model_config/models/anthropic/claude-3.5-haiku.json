@@ -1,0 +1,37 @@
+{
+  "id": "claude-3.5-haiku",
+  "displayName": "Claude 3.5 Haiku",
+  "provider": "anthropic",
+  "apiModel": "claude-3-5-haiku-latest",
+  "enabled": true,
+  "routing": {
+    "service": "anthropic",
+    "endpoint": "https://api.anthropic.com/v1/messages"
+  },
+  "globalRateLimit": {
+    "requests": 2000,
+    "window": {
+      "amount": 1,
+      "unit": "hour"
+    }
+  },
+  "userRateLimit": {
+    "requests": 100,
+    "window": {
+      "amount": 6,
+      "unit": "hours"
+    }
+  },
+  "parameters": {
+    "temperature": 0.7,
+    "max_tokens": 8192,
+    "top_p": 1.0,
+    "top_k": 40
+  },
+  "capabilities": {
+    "streaming": true,
+    "vision": true,
+    "functionCalling": true,
+    "webSearch": true
+  }
+} 

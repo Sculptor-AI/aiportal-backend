@@ -76,8 +76,10 @@ class ModelConfigService {
                     this.validateModelConfig(config);
                     this.enhanceModelConfig(config, provider);
                     
-                    this.modelConfigs.set(config.id, config);
-                    console.log(`📁 Loaded model: ${config.id} (${config.displayName})`);
+                    // Store with full ID (provider/modelId)
+                    const fullId = `${provider}/${config.id}`;
+                    this.modelConfigs.set(fullId, config);
+                    console.log(`📁 Loaded model: ${fullId} (${config.displayName})`);
                 }
             }
         } catch (error) {
@@ -106,6 +108,10 @@ class ModelConfigService {
         
         // Ensure provider matches directory
         config.provider = provider;
+        
+        // Store the original ID and the full ID
+        config.originalId = config.id;
+        config.fullId = `${provider}/${config.id}`;
         
         // Add timestamp for cache invalidation
         config._loadedAt = Date.now();
@@ -153,8 +159,10 @@ class ModelConfigService {
             this.validateModelConfig(config);
             this.enhanceModelConfig(config, provider);
             
-            this.modelConfigs.set(config.id, config);
-            console.log(`🔄 Reloaded model: ${config.id}`);
+            // Use full ID for storage
+            const fullId = `${provider}/${config.id}`;
+            this.modelConfigs.set(fullId, config);
+            console.log(`🔄 Reloaded model: ${fullId}`);
         } catch (error) {
             console.error(`❌ Failed to reload config ${filePath}:`, error.message);
         }
@@ -167,9 +175,21 @@ class ModelConfigService {
     }
 
     getModelIdFromPath(filePath) {
-        // Extract model ID from existing configs by matching file path
+        // Extract provider and model name from path
+        const provider = this.getProviderFromPath(filePath);
+        const fileName = path.basename(filePath, '.json');
+        
+        // Construct the full ID that would be used
+        const fullId = `${provider}/${fileName}`;
+        
+        // Check if this model exists in our configs
+        if (this.modelConfigs.has(fullId)) {
+            return fullId;
+        }
+        
+        // Fallback: search through all configs
         for (const [id, config] of this.modelConfigs) {
-            if (filePath.includes(config.provider) && filePath.includes(id)) {
+            if (filePath.includes(config.provider) && filePath.includes(config.originalId || config.id)) {
                 return id;
             }
         }
@@ -181,16 +201,29 @@ class ModelConfigService {
         return Array.from(this.modelConfigs.values())
             .filter(config => config.enabled)
             .map(config => ({
-                id: config.id,
+                id: config.fullId || config.id,
                 displayName: config.displayName,
                 provider: config.provider,
-                capabilities: config.capabilities || {},
-                pricing: config.pricing || {}
+                capabilities: config.capabilities || {}
             }));
     }
 
     getModelConfig(modelId) {
-        return this.modelConfigs.get(modelId);
+        // First try direct lookup with the provided ID
+        let config = this.modelConfigs.get(modelId);
+        
+        // If not found and modelId doesn't contain a slash, try adding provider prefixes
+        if (!config && !modelId.includes('/')) {
+            // Try to find a model with this ID in any provider
+            for (const [fullId, modelConfig] of this.modelConfigs) {
+                if (modelConfig.originalId === modelId || modelConfig.id === modelId) {
+                    config = modelConfig;
+                    break;
+                }
+            }
+        }
+        
+        return config;
     }
 
     isRateLimitingEnabled() {

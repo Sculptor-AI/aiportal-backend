@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import modelConfigService from './modelConfigService.js';
 
 /**
  * Initialize Gemini client
@@ -15,29 +16,27 @@ const initializeGeminiClient = () => {
 };
 
 /**
- * Map frontend model IDs to Gemini model names
+ * Get API model name from model config
  */
-const mapToGeminiModel = (modelId) => {
-  const modelMappings = {
-    'gemini-2.5-flash': 'gemini-2.5-flash',
-    'google/gemini-2.5-flash': 'gemini-2.5-flash',
-    'google/gemini-2.0-flash': 'gemini-2.5-flash',
-    'gemini-2.0-flash': 'gemini-2.5-flash',
-
-    'gemini-2.5-pro': 'gemini-2.5-pro',
-    'google/gemini-2.5-pro': 'gemini-2.5-pro',
-    'google/gemini-pro': 'gemini-2.5-pro',
-    'google/gemini-pro-vision': 'gemini-2.5-pro',
-    'gemini-pro': 'gemini-2.5-pro',
-  };
-  
-  return modelMappings[modelId] || modelId;
+const getApiModelName = (modelId) => {
+  const modelConfig = modelConfigService.getModelConfig(modelId);
+  if (modelConfig && modelConfig.apiModel) {
+    return modelConfig.apiModel;
+  }
+  // Fallback to the model ID if not found in config
+  return modelId;
 };
 
 /**
  * Check if a model is a Gemini model
  */
 export const isGeminiModel = (modelId) => {
+  // First check model config
+  const modelConfig = modelConfigService.getModelConfig(modelId);
+  if (modelConfig && modelConfig.provider === 'google') {
+    return true;
+  }
+  // Fallback to prefix check for backward compatibility
   return modelId.startsWith('gemini-') || modelId.startsWith('google/gemini');
 };
 
@@ -51,7 +50,7 @@ export const processGeminiChat = async (modelType, prompt, imageData = null, sys
       throw new Error("Gemini API is not configured. Please set GEMINI_API_KEY environment variable.");
     }
     
-    const modelName = mapToGeminiModel(modelType);
+    const modelName = getApiModelName(modelType);
     
     console.log(`Processing Gemini request with model: ${modelName}`);
     
@@ -97,7 +96,7 @@ export const processGeminiChat = async (modelType, prompt, imageData = null, sys
         id: `gemini-${Date.now()}`,
         object: 'chat.completion',
         created: Math.floor(Date.now() / 1000),
-        model: modelName,
+        model: modelType, // Return the requested model ID, not the API model name
         choices: [{
           index: 0,
           message: {
@@ -146,7 +145,7 @@ export const processGeminiChat = async (modelType, prompt, imageData = null, sys
         id: `gemini-${Date.now()}`,
         object: 'chat.completion',
         created: Math.floor(Date.now() / 1000),
-        model: modelName,
+        model: modelType, // Return the requested model ID, not the API model name
         choices: [{
           index: 0,
           message: {
@@ -156,9 +155,9 @@ export const processGeminiChat = async (modelType, prompt, imageData = null, sys
           finish_reason: 'stop'
         }],
         usage: {
-          prompt_tokens: -1, // Gemini doesn't provide token counts
-          completion_tokens: -1,
-          total_tokens: -1
+          prompt_tokens: 0, // Gemini doesn't provide token counts
+          completion_tokens: 0,
+          total_tokens: 0
         }
       };
     }
@@ -178,7 +177,7 @@ export const streamGeminiChat = async (modelType, prompt, imageData = null, syst
       throw new Error("Gemini API is not configured. Please set GEMINI_API_KEY environment variable.");
     }
     
-    const modelName = mapToGeminiModel(modelType);
+    const modelName = getApiModelName(modelType);
     
     console.log(`Processing streaming Gemini request with model: ${modelName}`);
     
@@ -220,7 +219,22 @@ export const streamGeminiChat = async (modelType, prompt, imageData = null, syst
       for await (const chunk of result.stream) {
         const chunkText = chunk.text();
         if (chunkText) {
-          onChunk(`data: ${JSON.stringify({ content: chunkText })}\n\n`);
+          // Format as SSE event matching OpenRouter format
+          const sseData = {
+            id: `gemini-${Date.now()}`,
+            object: 'chat.completion.chunk',
+            created: Math.floor(Date.now() / 1000),
+            model: modelType, // Return the requested model ID, not the API model name
+            choices: [{
+              index: 0,
+              delta: {
+                content: chunkText
+              },
+              finish_reason: null
+            }]
+          };
+          
+          onChunk(`data: ${JSON.stringify(sseData)}\n\n`);
         }
       }
       
@@ -262,7 +276,7 @@ export const streamGeminiChat = async (modelType, prompt, imageData = null, syst
           id: `gemini-${Date.now()}`,
           object: 'chat.completion.chunk',
           created: Math.floor(Date.now() / 1000),
-          model: modelName,
+          model: modelType, // Return the requested model ID, not the API model name
           choices: [{
             index: 0,
             delta: {
@@ -298,10 +312,6 @@ export const getGeminiModels = () => {
       source: 'gemini',
       context_length: 1048576,
       capabilities: ['text', 'vision'],
-      pricing: {
-        prompt: 0.00001,
-        completion: 0.00003
-      },
       isBackendModel: true
     },
     {
@@ -311,10 +321,6 @@ export const getGeminiModels = () => {
       source: 'gemini',
       context_length: 2097152,
       capabilities: ['text', 'vision', 'thinking'],
-      pricing: {
-        prompt: 0.00125,
-        completion: 0.005
-      },
       isBackendModel: true
     },
     {
@@ -324,10 +330,6 @@ export const getGeminiModels = () => {
       source: 'gemini',
       context_length: 1048576,
       capabilities: ['text', 'vision', 'audio', 'multimodal'],
-      pricing: {
-        prompt: 0.00001,
-        completion: 0.00003
-      },
       isBackendModel: true
     }
   ];

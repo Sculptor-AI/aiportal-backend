@@ -1,0 +1,36 @@
+{
+  "id": "gemini-2.5-flash-lite",
+  "displayName": "Gemini 2.5 Flash-Lite",
+  "provider": "google",
+  "apiModel": "gemini-2.5-flash-lite-preview-06-17",
+  "enabled": true,
+  "routing": {
+    "service": "openai",
+    "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+  },
+  "globalRateLimit": {
+    "requests": 3000,
+    "window": {
+      "amount": 1,
+      "unit": "hour"
+    }
+  },
+  "userRateLimit": {
+    "requests": 150,
+    "window": {
+      "amount": 6,
+      "unit": "hours"
+    }
+  },
+  "parameters": {
+    "temperature": 0.7,
+    "max_tokens": 64000,
+    "top_p": 1.0
+  },
+  "capabilities": {
+    "streaming": true,
+    "vision": true,
+    "functionCalling": true,
+    "webSearch": true
+  }
+} 

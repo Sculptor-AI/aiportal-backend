@@ -96,15 +96,9 @@ export class LocalInferenceService {
       const url = new URL(process.env.LOCAL_MODEL_URL);
       const port = parseInt(url.port);
       
-      // Test if the server is responding (try HTTPS first, then HTTP)
+      // Test if the server is responding - use HTTP directly for local models
       try {
-        let response;
-        try {
-          response = await fetch(`https://127.0.0.1:${port}/health`);
-        } catch (httpsError) {
-          console.warn('⚠️  HTTPS connection failed, falling back to HTTP for local model server');
-          response = await fetch(`http://127.0.0.1:${port}/health`);
-        }
+        const response = await fetch(`http://127.0.0.1:${port}/health`);
         
         if (response.ok) {
           console.log(`Using pre-configured server for ${cleanModelName} on port ${port}`);
@@ -219,26 +213,14 @@ export class LocalInferenceService {
 
       console.log(`Sending request to local model ${cleanModelName} on port ${port}`);
       
-      // Try HTTPS first, then fall back to HTTP
-      let response;
-      try {
-        response = await fetch(`https://127.0.0.1:${port}/v1/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload)
-        });
-      } catch (httpsError) {
-        console.warn('⚠️  HTTPS connection failed, falling back to HTTP for local model');
-        response = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload)
-        });
-      }
+      // Use HTTP directly for local model connections
+      const response = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
 
       if (!response.ok) {
         throw new Error(`Local model server error: ${response.status} ${response.statusText}`);
@@ -310,26 +292,14 @@ export class LocalInferenceService {
 
       console.log(`Sending streaming request to local model ${cleanModelName} on port ${port}`);
       
-      // Try HTTPS first, then fall back to HTTP
-      let response;
-      try {
-        response = await fetch(`https://127.0.0.1:${port}/v1/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload)
-        });
-      } catch (httpsError) {
-        console.warn('⚠️  HTTPS connection failed, falling back to HTTP for local model streaming');
-        response = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload)
-        });
-      }
+      // Use HTTP directly for local model connections
+      const response = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
 
       if (!response.ok) {
         throw new Error(`Local model server error: ${response.status} ${response.statusText}`);

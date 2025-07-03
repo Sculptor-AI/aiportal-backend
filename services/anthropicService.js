@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import modelConfigService from './modelConfigService.js';
 
 /**
  * Initialize Anthropic client
@@ -16,23 +17,27 @@ const initializeAnthropicClient = () => {
 };
 
 /**
- * Map frontend model IDs to Anthropic model names
+ * Get API model name from model config
  */
-const mapToAnthropicModel = (modelId) => {
-  const modelMappings = {
-    'claude-4-opus': 'claude-opus-4-20250514',
-    'anthropic/claude-4-opus': 'claude-opus-4-20250514',
-    'claude-4-sonnet': 'claude-sonnet-4-20250514',
-    'anthropic/claude-4-sonnet': 'claude-sonnet-4-20250514',
-  };
-  
-  return modelMappings[modelId] || modelId;
+const getApiModelName = (modelId) => {
+  const modelConfig = modelConfigService.getModelConfig(modelId);
+  if (modelConfig && modelConfig.apiModel) {
+    return modelConfig.apiModel;
+  }
+  // Fallback to the model ID if not found in config
+  return modelId;
 };
 
 /**
  * Check if a model is an Anthropic model
  */
 export const isAnthropicModel = (modelId) => {
+  // First check model config
+  const modelConfig = modelConfigService.getModelConfig(modelId);
+  if (modelConfig && modelConfig.provider === 'anthropic') {
+    return true;
+  }
+  // Fallback to prefix check for backward compatibility
   return modelId.startsWith('claude-') || modelId.startsWith('anthropic/claude');
 };
 
@@ -42,7 +47,7 @@ export const isAnthropicModel = (modelId) => {
 export const processAnthropicChat = async (modelType, prompt, imageData = null, systemPrompt = null, conversationHistory = []) => {
   try {
     const anthropic = initializeAnthropicClient();
-    const modelName = mapToAnthropicModel(modelType);
+    const modelName = getApiModelName(modelType);
     
     console.log(`Processing Anthropic request with model: ${modelName}`);
     
@@ -93,7 +98,7 @@ export const processAnthropicChat = async (modelType, prompt, imageData = null, 
       id: completion.id,
       object: 'chat.completion',
       created: Math.floor(Date.now() / 1000),
-      model: modelName,
+      model: modelType, // Return the requested model ID, not the API model name
       choices: [{
         index: 0,
         message: {
@@ -103,9 +108,9 @@ export const processAnthropicChat = async (modelType, prompt, imageData = null, 
         finish_reason: completion.stop_reason || 'stop'
       }],
       usage: {
-        prompt_tokens: completion.usage?.input_tokens || -1,
-        completion_tokens: completion.usage?.output_tokens || -1,
-        total_tokens: (completion.usage?.input_tokens || 0) + (completion.usage?.output_tokens || 0) || -1
+        prompt_tokens: completion.usage?.input_tokens || 0,
+        completion_tokens: completion.usage?.output_tokens || 0,
+        total_tokens: (completion.usage?.input_tokens || 0) + (completion.usage?.output_tokens || 0)
       }
     };
   } catch (error) {
@@ -120,7 +125,7 @@ export const processAnthropicChat = async (modelType, prompt, imageData = null, 
 export const streamAnthropicChat = async (modelType, prompt, imageData = null, systemPrompt = null, onChunk, conversationHistory = []) => {
   try {
     const anthropic = initializeAnthropicClient();
-    const modelName = mapToAnthropicModel(modelType);
+    const modelName = getApiModelName(modelType);
     
     console.log(`Processing streaming Anthropic request with model: ${modelName}`);
     
@@ -175,7 +180,7 @@ export const streamAnthropicChat = async (modelType, prompt, imageData = null, s
           id: `anthropic-${Date.now()}`,
           object: 'chat.completion.chunk',
           created: Math.floor(Date.now() / 1000),
-          model: modelName,
+          model: modelType, // Return the requested model ID, not the API model name
           choices: [{
             index: 0,
             delta: {
@@ -210,10 +215,6 @@ export const getAnthropicModels = () => {
       source: 'anthropic',
       context_length: 200000,
       capabilities: ['text', 'vision'],
-      pricing: {
-        prompt: 0.015,
-        completion: 0.075
-      },
       isBackendModel: true
     },
     {
@@ -223,10 +224,6 @@ export const getAnthropicModels = () => {
       source: 'anthropic',
       context_length: 200000,
       capabilities: ['text', 'vision'],
-      pricing: {
-        prompt: 0.003,
-        completion: 0.015
-      },
       isBackendModel: true
     },
     {
@@ -236,10 +233,6 @@ export const getAnthropicModels = () => {
       source: 'anthropic',
       context_length: 200000,
       capabilities: ['text', 'vision'],
-      pricing: {
-        prompt: 0.00025,
-        completion: 0.00125
-      },
       isBackendModel: true
     }
   ];

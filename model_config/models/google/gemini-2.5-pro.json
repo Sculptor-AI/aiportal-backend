@@ -1,0 +1,36 @@
+{
+  "id": "gemini-2.5-pro",
+  "displayName": "Gemini 2.5 Pro",
+  "provider": "google",
+  "apiModel": "gemini-2.5-pro",
+  "enabled": true,
+  "routing": {
+    "service": "openai",
+    "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+  },
+  "globalRateLimit": {
+    "requests": 1500,
+    "window": {
+      "amount": 1,
+      "unit": "hour"
+    }
+  },
+  "userRateLimit": {
+    "requests": 75,
+    "window": {
+      "amount": 6,
+      "unit": "hours"
+    }
+  },
+  "parameters": {
+    "temperature": 0.7,
+    "max_tokens": 65536,
+    "top_p": 1.0
+  },
+  "capabilities": {
+    "streaming": true,
+    "vision": false,
+    "functionCalling": false,
+    "webSearch": true
+  }
+}

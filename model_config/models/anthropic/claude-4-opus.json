@@ -1,0 +1,39 @@
+{
+  "id": "claude-4-opus",
+  "displayName": "Claude 4 Opus",
+  "provider": "anthropic",
+  "apiModel": "claude-opus-4-0",
+  "enabled": true,
+  "routing": {
+    "service": "anthropic",
+    "endpoint": "https://api.anthropic.com/v1/messages"
+  },
+  "globalRateLimit": {
+    "requests": 500,
+    "window": {
+      "amount": 1,
+      "unit": "hour"
+    }
+  },
+  "userRateLimit": {
+    "requests": 25,
+    "window": {
+      "amount": 6,
+      "unit": "hours"
+    }
+  },
+  "parameters": {
+    "temperature": 0.7,
+    "max_tokens": 32000,
+    "top_p": 1.0,
+    "top_k": 40
+  },
+  "capabilities": {
+    "streaming": true,
+    "vision": true,
+    "functionCalling": true,
+    "webSearch": true,
+    "reasoning": true,
+    "analytics": true
+  }
+} 

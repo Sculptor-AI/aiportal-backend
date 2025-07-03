@@ -1,0 +1,41 @@
+{
+  "id": "mercury-coder",
+  "displayName": "Mercury Coder",
+  "provider": "inception",
+  "apiModel": "inception/mercury-coder",
+  "enabled": true,
+  "routing": {
+    "service": "openrouter",
+    "endpoint": "https://openrouter.ai/api/v1/chat/completions"
+  },
+  "globalRateLimit": {
+    "requests": 2000,
+    "window": {
+      "amount": 1,
+      "unit": "hour"
+    }
+  },
+  "userRateLimit": {
+    "requests": 100,
+    "window": {
+      "amount": 6,
+      "unit": "hours"
+    }
+  },
+  "parameters": {
+    "temperature": 0.7,
+    "max_tokens": 32000,
+    "top_p": 1.0,
+    "frequency_penalty": 0,
+    "presence_penalty": 0
+  },
+  "capabilities": {
+    "streaming": true,
+    "vision": false,
+    "functionCalling": false,
+    "webSearch": false,
+    "coding": true,
+    "speed": "5-10x faster than traditional models"
+  },
+  "description": "Mercury Coder applies discrete diffusion for ultra-fast code generation, ranking 1st in speed and 2nd in quality on Copilot Arena."
+} 

@@ -1,0 +1,38 @@
+{
+  "id": "o4-mini",
+  "displayName": "o4 Mini",
+  "provider": "openai",
+  "apiModel": "o4-mini-2025-04-16",
+  "enabled": true,
+  "routing": {
+    "service": "openai",
+    "endpoint": "https://api.openai.com/v1/chat/completions"
+  },
+  "globalRateLimit": {
+    "requests": 1000,
+    "window": {
+      "amount": 1,
+      "unit": "hour"
+    }
+  },
+  "userRateLimit": {
+    "requests": 50,
+    "window": {
+      "amount": 6,
+      "unit": "hours"
+    }
+  },
+  "parameters": {
+    "max_completion_tokens": 100000,
+    "top_p": 1.0,
+    "frequency_penalty": 0,
+    "presence_penalty": 0
+  },
+  "capabilities": {
+    "streaming": true,
+    "vision": false,
+    "functionCalling": true,
+    "webSearch": true,
+    "reasoning": true
+  }
+} 
