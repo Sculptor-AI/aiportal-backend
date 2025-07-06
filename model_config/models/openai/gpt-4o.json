@@ -6,7 +6,7 @@
   "enabled": true,
   "routing": {
     "service": "openai",
-    "endpoint": "https://api.openai.com/v1/chat/completions"
+    "endpoint": "https://api.openai.com/v1"
   },
   "globalRateLimit": {
     "requests": 1500,
@@ -35,4 +35,4 @@
     "functionCalling": true,
     "webSearch": true
   }
-} 
+}

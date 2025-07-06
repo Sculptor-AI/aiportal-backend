@@ -159,8 +159,12 @@ export class RouterboxService {
       throw new Error("OpenRouter API is not configured. Please set OPENROUTER_API_KEY environment variable to use models not directly supported.");
     }
 
+    // Get the model config to check for routing-specific model name
+    const modelConfig = modelConfigService.getModelConfig(model);
+    const routingModel = modelConfig?.routing?.apiModel || model;
+
     const payload = {
-      model: model,
+      model: routingModel,
       messages: [],
       temperature: temperature,
       stream: streaming
@@ -278,8 +282,12 @@ export class RouterboxService {
       throw new Error("OpenRouter API is not configured. Please set OPENROUTER_API_KEY environment variable to use models not directly supported.");
     }
 
+    // Get the model config to check for routing-specific model name
+    const modelConfig = modelConfigService.getModelConfig(model);
+    const routingModel = modelConfig?.routing?.apiModel || model;
+
     const payload = {
-      model: model,
+      model: routingModel,
       messages: [],
       temperature: temperature,
       stream: true

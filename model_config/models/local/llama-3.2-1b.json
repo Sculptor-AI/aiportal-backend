@@ -31,9 +31,9 @@
     "n_ctx": 4096
   },
   "capabilities": {
-    "streaming": true,
+    "streaming": false,
     "vision": false,
     "functionCalling": false,
-    "webSearch": true
+    "webSearch": false
   }
 }

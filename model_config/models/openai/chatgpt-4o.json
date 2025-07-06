@@ -1,22 +1,22 @@
 {
-  "id": "gpt-4o-mini",
-  "displayName": "GPT-4o Mini",
+  "id": "chatgpt-4o",
+  "displayName": "ChatGPT-4o",
   "provider": "openai",
-  "apiModel": "gpt-4o-mini-2024-07-18",
+  "apiModel": "gpt-4o",
   "enabled": true,
   "routing": {
-    "service": "openai",
-    "endpoint": "https://api.openai.com/v1"
+    "service": "openrouter",
+    "apiModel": "openai/gpt-4o"
   },
   "globalRateLimit": {
-    "requests": 2000,
+    "requests": 1500,
     "window": {
       "amount": 1,
       "unit": "hour"
     }
   },
   "userRateLimit": {
-    "requests": 100,
+    "requests": 75,
     "window": {
       "amount": 6,
       "unit": "hours"

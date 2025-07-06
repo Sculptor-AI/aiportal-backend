@@ -46,7 +46,20 @@ export const isOpenAIModel = (modelId) => {
  */
 export const processOpenAICompatibleChat = async (modelType, prompt, imageData = null, systemPrompt = null, conversationHistory = [], modelConfig = null) => {
   try {
-    const apiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
+    // Select the appropriate API key based on the model provider
+    let apiKey;
+    if (modelConfig?.provider === 'google') {
+      apiKey = process.env.GEMINI_API_KEY;
+    } else if (modelConfig?.provider === 'openai') {
+      apiKey = process.env.OPENAI_API_KEY;
+    } else {
+      // Fallback logic based on endpoint
+      if (modelConfig?.routing?.endpoint?.includes('googleapis.com')) {
+        apiKey = process.env.GEMINI_API_KEY;
+      } else {
+        apiKey = process.env.OPENAI_API_KEY;
+      }
+    }
     
     if (!apiKey) {
       throw new Error("API key is not configured in environment variables");
@@ -336,7 +349,20 @@ export const processOpenAIChat = async (modelType, prompt, imageData = null, sys
  */
 export const streamOpenAICompatibleChat = async (modelType, prompt, imageData = null, systemPrompt = null, onChunk, conversationHistory = [], modelConfig = null) => {
   try {
-    const apiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
+    // Select the appropriate API key based on the model provider
+    let apiKey;
+    if (modelConfig?.provider === 'google') {
+      apiKey = process.env.GEMINI_API_KEY;
+    } else if (modelConfig?.provider === 'openai') {
+      apiKey = process.env.OPENAI_API_KEY;
+    } else {
+      // Fallback logic based on endpoint
+      if (modelConfig?.routing?.endpoint?.includes('googleapis.com')) {
+        apiKey = process.env.GEMINI_API_KEY;
+      } else {
+        apiKey = process.env.OPENAI_API_KEY;
+      }
+    }
     
     if (!apiKey) {
       throw new Error("API key is not configured in environment variables");
