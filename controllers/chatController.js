@@ -430,39 +430,31 @@ export const streamChat = async (req, res) => {
         }
         
         // Stream the response content if available
+        let content = '';
         if (searchResponse.data.result && searchResponse.data.result.choices && 
             searchResponse.data.result.choices[0] && 
             searchResponse.data.result.choices[0].message) {
           
-          const content = searchResponse.data.result.choices[0].message.content;
-          res.write(`data: ${JSON.stringify({ content })}\n\n`);
+          content = searchResponse.data.result.choices[0].message.content;
         } else if (searchResponse.data.choices && searchResponse.data.choices[0]) {
           // For OpenRouter format
-          const content = searchResponse.data.choices[0].message.content;
-          res.write(`data: ${JSON.stringify({ content })}\n\n`);
+          content = searchResponse.data.choices[0].message.content;
         } else if (searchResponse.data.content) {
-          res.write(`data: ${JSON.stringify({ content: searchResponse.data.content })}\n\n`);
+          content = searchResponse.data.content;
         } else {
           // If we can't find the content in the expected structure, try to send the whole response
           // This is a fallback for unexpected response structures
           try {
             const fullResponse = JSON.stringify(searchResponse.data);
-            res.write(`data: ${JSON.stringify({ content: `Unable to parse structured response. Full data: ${fullResponse}` })}\n\n`);
+            content = `Unable to parse structured response. Full data: ${fullResponse}`;
           } catch (e) {
             console.error('Error parsing search results:', e);
-            res.write(`data: ${JSON.stringify({ content: "Received search results but couldn't parse them." })}\n\n`);
+            content = "Received search results but couldn't parse them.";
           }
         }
         
-        // Add sources as structured data in the "sources" property of the message
-        // We'll parse this separately in the frontend
-        if (searchResponse.data.sources && searchResponse.data.sources.length > 0) {
-          const sourceEvent = {
-            type: 'sources',
-            sources: searchResponse.data.sources
-          };
-          res.write(`data: ${JSON.stringify(sourceEvent)}\n\n`);
-        }
+        // The content already has the <links> format appended by the searchAndProcess function
+        res.write(`data: ${JSON.stringify({ content })}\n\n`);
         
         // End the response
         res.write('data: [DONE]\n\n');

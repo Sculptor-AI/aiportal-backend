@@ -316,13 +316,13 @@ export const scrapeUrl = async (req, res) => {
 };
 
 /**
- * Process search results and feed them to model
+ * Process search results and feed them to model (using snippets only for efficiency)
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
 export const searchAndProcess = async (req, res) => {
   try {
-    const { query, max_results = 2, model_prompt, modelType = 'meta-llama/llama-4-maverick:free' } = req.body;
+    const { query, max_results = 3, model_prompt, modelType = 'meta-llama/llama-4-maverick:free' } = req.body;
     
     if (!query || typeof query !== 'string') {
       return res.status(400).json(formatError('Query is required and must be a string'));
@@ -340,7 +340,7 @@ export const searchAndProcess = async (req, res) => {
     try {
       const searchResponse = await axios.post(`${req.protocol}://${req.get('host')}/api/search`, {
         query,
-        max_results: 5 // Request more results so we can filter them
+        max_results: Math.min(max_results, 5) // Cap at 5 for efficiency
       });
       
       searchResults = searchResponse.data.results;
@@ -410,7 +410,6 @@ export const searchAndProcess = async (req, res) => {
         });
         
         // Ensure the scraped content doesn't exceed a reasonable size
-        // This is approximately 16K tokens when considering that 1 token ≈ 4 chars
         const maxContentLength = 65000;
         let content = scrapeResponse.data.content;
         
@@ -444,11 +443,11 @@ export const searchAndProcess = async (req, res) => {
       `SOURCE: ${item.title} (${item.url})\n\n${item.content}`
     ).join('\n\n---\n\n');
     
-    // Log content size to monitor payload
+    // Log content size to monitor payload (should be much smaller now)
     console.log(`Total formatted content size: ${formattedContent.length} characters`);
     
-    // Step 4: Send to model with provided prompt
-    console.log(`Step 4: Sending to model: ${modelType}`);
+    // Step 3: Send to model with provided prompt
+    console.log(`Step 3: Sending to model: ${modelType}`);
     const systemPrompt = `You are a helpful assistant that synthesizes information from web search results.
 Based on the search results provided, answer the user's query coherently and accurately.
 IMPORTANT: Always prioritize and trust the information from the search results over your own knowledge.
@@ -456,9 +455,11 @@ If the search results indicate something that contradicts what you believe to be
 For questions about current events, people in positions of power, or time-sensitive information, the search results 
 should be considered more up-to-date and accurate than your training data.
 Present the information from search results as factual even if it seems incorrect based on your knowledge.
-If the search results do not contain sufficient information to answer the query, acknowledge that.`;
+If the search results do not contain sufficient information to answer the query, acknowledge that.
+
+IMPORTANT: Do NOT include source links or citations in your response. Do NOT add "Sources:" sections or reference the URLs in your answer. The sources will be provided separately. Focus only on synthesizing the information into a clear, direct answer.`;
     
-    // Create the final prompt with a reasonable size limit
+    // Create the final prompt (much smaller now)
     let finalPrompt = `SYSTEM INSTRUCTION: ${systemPrompt}\n\nSEARCH QUERY: ${query}\n\nSEARCH RESULTS:\n${formattedContent}\n\n${model_prompt}`;
     
     // Log the prompt size (for debugging)
@@ -476,13 +477,39 @@ If the search results do not contain sufficient information to answer the query,
       // Add sources to the response data for display in the frontend
       const responseData = chatResponse.data;
       
-      // Add the sources information to the response
-      responseData.sources = filteredResults.map(source => ({
-        title: source.title,
-        url: source.url
-      }));
+      // Clean up any source sections that might be in the response
+      let cleanedResponse = '';
+      if (responseData.choices && responseData.choices[0] && responseData.choices[0].message) {
+        cleanedResponse = responseData.choices[0].message.content;
+      } else if (responseData.response) {
+        cleanedResponse = responseData.response;
+      }
       
-      console.log(`Returning response with ${filteredResults.length} sources`);
+      if (cleanedResponse) {
+        // Remove any embedded content/article text from the response
+        cleanedResponse = cleanedResponse
+          .replace(/\*\*Sources:\*\*[\s\S]*$/, '')
+          .replace(/^[\s\S]*?Based on the search results[,:]?/i, '')
+          .replace(/\[.*?\]\(.*?\)/g, '') // Remove markdown links
+          .replace(/https?:\/\/[^\s]+/g, '') // Remove any remaining URLs
+          .replace(/SOURCE:.*$/gm, '') // Remove SOURCE: lines
+          .trim();
+        
+        // Append links at the end in the specified format
+        if (filteredResults.length > 0) {
+          const links = filteredResults.map(source => source.url).join(' ; ');
+          cleanedResponse += ` <links> ${links} </links>`;
+        }
+        
+        // Update the response with cleaned content and appended links
+        if (responseData.choices && responseData.choices[0] && responseData.choices[0].message) {
+          responseData.choices[0].message.content = cleanedResponse;
+        } else if (responseData.response) {
+          responseData.response = cleanedResponse;
+        }
+      }
+      
+      console.log(`Returning response with ${filteredResults.length} sources appended as links`);
       
       // Return the data directly instead of nesting it in 'result'
       return res.status(200).json(responseData);

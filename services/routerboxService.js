@@ -75,6 +75,7 @@ export class RouterboxService {
         return await this.handleOllamaRequest(model, messages, imageData, systemPrompt, streaming);
         
       case 'local':
+      case 'localInference':
         return await this.handleLocalRequest(model, messages, imageData, systemPrompt, streaming);
         
       case 'openrouter':
@@ -266,6 +267,7 @@ export class RouterboxService {
         return await streamOllamaChat(model, promptOllama, imageData, systemPrompt, writeCallback, conversationHistoryOllama);
         
       case 'local':
+      case 'localInference':
         const lastMessageLocal = messages[messages.length - 1];
         const promptLocal = lastMessageLocal?.content || '';
         const conversationHistoryLocal = messages.slice(0, -1);
@@ -390,14 +392,21 @@ Please answer the user's query based on the search results above.`;
       console.log(`Routerbox: Sending web search enhanced request to model ${model}`);
       const response = await this.routeChat(enhancedParams);
       
-      // Add sources to the response
-      response.sources = searchResults.map(source => ({
-        title: source.title,
-        url: source.url,
-        snippet: source.snippet
-      }));
+      // Clean and append links to the response content in the correct format
+      const cleanedResponse = BraveSearchService.cleanResponse(
+        response.choices?.[0]?.message?.content || response.response || ''
+      );
       
-      console.log(`Routerbox: Web search request completed with ${searchResults.length} sources`);
+      const finalResponse = BraveSearchService.appendLinksToResponse(cleanedResponse, searchResults);
+      
+      // Update the response with cleaned content and appended links
+      if (response.choices && response.choices[0] && response.choices[0].message) {
+        response.choices[0].message.content = finalResponse;
+      } else if (response.response) {
+        response.response = finalResponse;
+      }
+      
+      console.log(`Routerbox: Web search request completed with ${searchResults.length} sources appended as links`);
       return response;
       
     } catch (error) {
@@ -473,21 +482,34 @@ Please answer the user's query based on the search results above.`;
       
       console.log(`Routerbox: Sending streaming web search enhanced request to model ${model}`);
       
-      // Send sources first
-      const sourceEvent = {
-        type: 'sources',
-        sources: searchResults.map(source => ({
-          title: source.title,
-          url: source.url,
-          snippet: source.snippet
-        }))
+      // Create a wrapper callback that will append links only at the very end
+      let isStreamComplete = false;
+      
+      const wrapperCallback = (chunk) => {
+        // Check if this is the final chunk indicating stream completion
+        if (chunk.includes('data: [DONE]')) {
+          // Send the links as a separate chunk just before [DONE]
+          if (!isStreamComplete) {
+            const linksEvent = {
+              choices: [{
+                delta: {
+                  content: ` <links> ${searchResults.map(s => s.url).join(' ; ')} </links>`
+                }
+              }]
+            };
+            writeCallback(`data: ${JSON.stringify(linksEvent)}\n\n`);
+            isStreamComplete = true;
+          }
+        }
+        
+        // Pass through the original chunk (unmodified)
+        writeCallback(chunk);
       };
-      writeCallback(`data: ${JSON.stringify(sourceEvent)}\n\n`);
       
-      // Then stream the model response
-      await this.streamChat(enhancedParams, writeCallback);
+      // Stream the model response with our wrapper
+      await this.streamChat(enhancedParams, wrapperCallback);
       
-      console.log(`Routerbox: Streaming web search request completed with ${searchResults.length} sources`);
+      console.log(`Routerbox: Streaming web search request completed with ${searchResults.length} sources appended as links`);
       
     } catch (error) {
       console.error('Routerbox: Streaming web search request failed:', error);

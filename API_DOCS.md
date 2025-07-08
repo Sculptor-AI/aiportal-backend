@@ -317,10 +317,10 @@ X-API-Key: YOUR_API_KEY
 
 **How Web Search Works:**
 1. The system performs a web search using your query
-2. Scrapes and extracts content from top search results
+2. Scrapes and extracts content from top search results for comprehensive information
 3. Provides this current information to the AI model
 4. The model synthesizes an answer based on the latest web data
-5. Sources are included in the response for verification
+5. Source links are appended at the end in `<links>` format for easy parsing
 
 **Available Models:**
 
@@ -363,7 +363,7 @@ X-API-Key: YOUR_API_KEY
 }
 ```
 
-**Web Search Response (includes sources):**
+**Web Search Response (with embedded links):**
 ```json
 {
   "id": "chatcmpl-124",
@@ -375,21 +375,9 @@ X-API-Key: YOUR_API_KEY
       "index": 0,
       "message": {
         "role": "assistant",
-        "content": "Based on the latest search results, here are recent developments in artificial intelligence:\n\n1. **New LLM Architectures**: Recent breakthroughs in transformer architectures have led to more efficient models with improved reasoning capabilities.\n\n2. **AI Safety Progress**: Researchers have developed new alignment techniques to ensure AI systems better follow human intentions and values.\n\n3. **Computer Vision Advances**: New multimodal models can now understand images and text together with unprecedented accuracy.\n\nThese developments represent significant progress in making AI more capable, safer, and more useful for real-world applications."
+        "content": "Based on the latest search results, here are recent developments in artificial intelligence:\n\n1. **New LLM Architectures**: Recent breakthroughs in transformer architectures have led to more efficient models with improved reasoning capabilities.\n\n2. **AI Safety Progress**: Researchers have developed new alignment techniques to ensure AI systems better follow human intentions and values.\n\n3. **Computer Vision Advances**: New multimodal models can now understand images and text together with unprecedented accuracy.\n\nThese developments represent significant progress in making AI more capable, safer, and more useful for real-world applications. <links> https://www.technologyreview.com/ai-breakthroughs ; https://www.anthropic.com/safety-progress-2024 </links>"
       },
       "finish_reason": "stop"
-    }
-  ],
-  "sources": [
-    {
-      "title": "Latest AI Research Breakthroughs - MIT Technology Review",
-      "url": "https://www.technologyreview.com/ai-breakthroughs",
-      "snippet": "Recent developments in artificial intelligence show promising advances in model efficiency and safety..."
-    },
-    {
-      "title": "AI Safety Progress Report 2024",
-      "url": "https://www.anthropic.com/safety-progress-2024",
-      "snippet": "New alignment techniques have been developed to ensure AI systems better follow human intentions..."
     }
   ],
   "usage": {
@@ -400,12 +388,74 @@ X-API-Key: YOUR_API_KEY
 }
 ```
 
+**Note**: The response content now includes links embedded at the end in the format `<links> url1 ; url2 </links>`. This makes it easy for frontend applications to parse and display source links separately from the main content.
+
 **Key Benefits of Web Search:**
 - 🔍 **Real-time Information**: Get the latest news, events, and data
 - 📊 **Current Statistics**: Access up-to-date numbers and trends  
 - 🌐 **Diverse Sources**: Information from multiple authoritative websites
 - 📝 **Source Attribution**: All sources are provided for fact-checking
-- ⚡ **Fast Processing**: Results typically returned in 2-5 seconds
+- ⚡ **Comprehensive Content**: Full page scraping provides detailed information
+- 🔗 **Clean Streaming**: Links appear only once at the end of streaming responses
+
+### Link Format and Parsing
+
+**All web search responses** now include source links embedded at the end of the response in a specific format that's easy to parse:
+
+**Format**: `<links> url1 ; url2 ; url3 </links>`
+
+**Example Response Content**:
+```
+Here's information about recent AI developments...
+
+These developments represent significant progress in AI technology. <links> https://www.technologyreview.com/ai-breakthroughs ; https://www.anthropic.com/safety-progress-2024 </links>
+```
+
+**This format is consistent across all web search endpoints:**
+- `/api/v1/chat/completions` with `web_search: true`
+- `/api/search-process` (legacy endpoint)
+- All streaming and non-streaming web search responses
+- All models when using web search functionality
+
+**Parsing Links (JavaScript)**:
+```javascript
+function parseLinksFromResponse(content) {
+  const linkMatch = content.match(/<links>\s*(.*?)\s*<\/links>/);
+  if (linkMatch) {
+    const linksString = linkMatch[1];
+    const links = linksString.split(' ; ').map(url => url.trim());
+    const cleanContent = content.replace(/<links>.*?<\/links>/, '').trim();
+    return { content: cleanContent, links: links };
+  }
+  return { content: content, links: [] };
+}
+
+// Usage
+const { content, links } = parseLinksFromResponse(response.choices[0].message.content);
+console.log('Clean content:', content);
+console.log('Source links:', links);
+```
+
+**Parsing Links (Python)**:
+```python
+import re
+
+def parse_links_from_response(content):
+    link_match = re.search(r'<links>\s*(.*?)\s*</links>', content)
+    if link_match:
+        links_string = link_match.group(1)
+        links = [url.strip() for url in links_string.split(' ; ')]
+        clean_content = re.sub(r'<links>.*?</links>', '', content).strip()
+        return {'content': clean_content, 'links': links}
+    return {'content': content, 'links': []}
+
+# Usage
+result = parse_links_from_response(response['choices'][0]['message']['content'])
+print('Clean content:', result['content'])
+print('Source links:', result['links'])
+```
+
+This format allows for easy extraction of source URLs while maintaining a clean response that can be displayed to users without the embedded link tags.
 
 #### Streaming Chat
 ```http
@@ -452,10 +502,8 @@ X-API-Key: YOUR_API_KEY
 }
 ```
 
-**Response:** Server-Sent Events (SSE) with sources
+**Response:** Server-Sent Events (SSE) with embedded links
 ```
-data: {"type":"sources","sources":[{"title":"SpaceX Falcon Heavy Launch Success","url":"https://spacex.com/news/falcon-heavy-success","snippet":"SpaceX successfully launched Falcon Heavy today..."},{"title":"NASA SpaceX Partnership Update","url":"https://nasa.gov/spacex-update","snippet":"NASA and SpaceX continue their collaboration..."}]}
-
 data: {"choices":[{"delta":{"content":"Based"}}]}
 
 data: {"choices":[{"delta":{"content":" on"}}]}
@@ -484,14 +532,21 @@ data: {"choices":[{"delta":{"content":" successfully"}}]}
 
 data: {"choices":[{"delta":{"content":" launched"}}]}
 
+data: {"choices":[{"delta":{"content":" the mission today."}}]}
+
+data: {"choices":[{"delta":{"content":" <links> https://spacex.com/news/falcon-heavy-success ; https://nasa.gov/spacex-update </links>"}}]}
+
 data: [DONE]
 ```
 
+**Note:** In streaming responses, the `<links>` section is sent as a single chunk at the very end, just before the `[DONE]` marker. This ensures links appear only once and can be easily parsed without duplication.
+
 **Streaming Web Search Features:**
-- 📡 **Sources First**: Sources are sent immediately after search completion
+- 📡 **Single Link Transmission**: Links are sent only once at the end, no duplication
 - ⚡ **Real-time Streaming**: Response streams as the AI processes the information
 - 🔄 **Live Updates**: Perfect for real-time news and current events
-- 📱 **Client-Friendly**: Easy to parse and display in web/mobile apps
+- 📱 **Client-Friendly**: Easy to parse links from the final chunk
+- 🎯 **Clean Implementation**: No links repeated in every streaming chunk
 
 #### List Models
 ```http
@@ -617,9 +672,10 @@ The web search system intelligently prioritizes sources:
 #### Web Search Configuration
 
 - **Default Results**: 2-3 high-quality sources per query
+- **Content Source**: Full page scraping for comprehensive information
 - **Content Limit**: ~65,000 characters per source (auto-truncated)
-- **Timeout**: 20 seconds per URL scraping attempt
-- **Retry Logic**: Automatic fallback for failed scrapes
+- **Response Time**: 2-5 seconds typical (includes scraping time)
+- **Streaming Optimization**: Links sent only once at the end
 - **Rate Limiting**: Respects Brave API rate limits
 
 ---
@@ -888,6 +944,7 @@ const response = await fetch('https://api.sculptorai.org/api/v1/chat/completions
 
 const reader = response.body.getReader();
 const decoder = new TextDecoder();
+let fullContent = '';
 
 while (true) {
   const { done, value } = await reader.read();
@@ -899,25 +956,39 @@ while (true) {
   for (const line of lines) {
     if (line.startsWith('data: ')) {
       const data = line.slice(6);
-      if (data === '[DONE]') return;
+      if (data === '[DONE]') {
+        // Parse links from final content
+        const { content, links } = parseLinksFromResponse(fullContent);
+        console.log('\nFinal content:', content);
+        console.log('Source links:', links);
+        return;
+      }
       
       try {
         const parsed = JSON.parse(data);
         
-        // Handle sources
-        if (parsed.type === 'sources') {
-          console.log('Sources found:', parsed.sources);
-        }
-        
         // Handle content
         if (parsed.choices?.[0]?.delta?.content) {
-          process.stdout.write(parsed.choices[0].delta.content);
+          const deltaContent = parsed.choices[0].delta.content;
+          fullContent += deltaContent;
+          process.stdout.write(deltaContent);
         }
       } catch (e) {
         // Skip parsing errors
       }
     }
   }
+}
+
+function parseLinksFromResponse(content) {
+  const linkMatch = content.match(/<links>\s*(.*?)\s*<\/links>/);
+  if (linkMatch) {
+    const linksString = linkMatch[1];
+    const links = linksString.split(' ; ').map(url => url.trim());
+    const cleanContent = content.replace(/<links>.*?<\/links>/, '').trim();
+    return { content: cleanContent, links: links };
+  }
+  return { content: content, links: [] };
 }
 ```
 
@@ -946,6 +1017,16 @@ print(response.json()['choices'][0]['message']['content'])
 **Request with Web Search:**
 ```python
 import requests
+import re
+
+def parse_links_from_response(content):
+    link_match = re.search(r'<links>\s*(.*?)\s*</links>', content)
+    if link_match:
+        links_string = link_match.group(1)
+        links = [url.strip() for url in links_string.split(' ; ')]
+        clean_content = re.sub(r'<links>.*?</links>', '', content).strip()
+        return {'content': clean_content, 'links': links}
+    return {'content': content, 'links': []}
 
 response = requests.post('https://api.sculptorai.org/api/v1/chat/completions', 
   headers={
@@ -962,10 +1043,13 @@ response = requests.post('https://api.sculptorai.org/api/v1/chat/completions',
 )
 
 result = response.json()
-print('Response:', result['choices'][0]['message']['content'])
-print('\nSources:')
-for source in result.get('sources', []):
-    print(f"- {source['title']}: {source['url']}")
+content_with_links = result['choices'][0]['message']['content']
+parsed = parse_links_from_response(content_with_links)
+
+print('Response:', parsed['content'])
+print('\nSource Links:')
+for link in parsed['links']:
+    print(f"- {link}")
 ```
 
 ### cURL
@@ -1069,15 +1153,15 @@ PORT=3001 npm start
 
 **"Sources not appearing"**
 - Web search may have failed but chat still works
-- Check server logs for scraping errors
-- Some websites block automated access
+- Check server logs for search errors
 - Rate limits may prevent additional searches
+- Links should appear in `<links>` format at end of response
 
-**"Search results outdated"**
-- Brave Search API provides real-time results
-- Content scraping might hit cached versions
-- Some sites update content gradually
-- Check source timestamps in response
+**"Links appearing multiple times in stream"**
+- This issue has been fixed - links now appear only once at the end of streaming responses
+- Links are sent as a single chunk just before the `[DONE]` marker
+- No more duplicate links in every streaming chunk
+- Easy to parse and display without filtering duplicates
 
 ### Getting Help
 - Check server logs for detailed error messages

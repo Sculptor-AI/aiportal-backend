@@ -100,7 +100,7 @@ export class LocalInferenceService {
       
       // Test if the server is responding - use HTTP directly for local models
       try {
-        const response = await fetch(`http://127.0.0.1:${port}/health`);
+        const response = await fetch(`http://127.0.0.1:${port}/v1/models`);
         
         if (response.ok) {
           console.log(`Using pre-configured server for ${cleanModelName} on port ${port}`);
@@ -115,6 +115,21 @@ export class LocalInferenceService {
     
     if (this.runningServers.has(cleanModelName)) {
       return this.serverPorts.get(cleanModelName);
+    }
+
+    // Check if a server is already running on common ports (8081-8090)
+    for (let port = 8081; port <= 8090; port++) {
+      try {
+        const response = await fetch(`http://127.0.0.1:${port}/v1/models`);
+        if (response.ok) {
+          console.log(`Found existing server for ${cleanModelName} on port ${port}`);
+          this.runningServers.set(cleanModelName, true);
+          this.serverPorts.set(cleanModelName, port);
+          return port;
+        }
+      } catch (error) {
+        // Continue checking other ports
+      }
     }
 
     const models = await this.getAvailableModels();

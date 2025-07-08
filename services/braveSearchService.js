@@ -300,9 +300,58 @@ export class BraveSearchService {
     }
   }
   
+  static async searchSnippetsOnly(query, maxResults = 3) {
+    try {
+      console.log(`BraveSearchService: Starting snippet-only search for "${query}"`);
+      
+      // Only search, no scraping
+      const searchResults = await this.searchWeb(query, maxResults);
+      
+      if (!searchResults.length) {
+        throw new Error('No search results found');
+      }
+      
+      // Return just the search results with snippets
+      console.log(`BraveSearchService: Returning ${searchResults.length} search results with snippets only`);
+      
+      return {
+        searchResults: searchResults,
+        scrapedContents: searchResults.map(result => ({
+          title: result.title,
+          url: result.url,
+          content: result.snippet // Use snippet instead of scraped content
+        }))
+      };
+      
+    } catch (error) {
+      console.error('BraveSearchService: Snippet-only search error:', error);
+      throw error;
+    }
+  }
+  
   static formatSearchContent(scrapedContents) {
     return scrapedContents.map(item => 
       `SOURCE: ${item.title} (${item.url})\n\n${item.content}`
     ).join('\n\n---\n\n');
+  }
+  
+  static cleanResponse(response) {
+    if (!response) return response;
+    
+    // Remove source sections and links from response
+    return response
+      .replace(/\*\*Sources:\*\*[\s\S]*$/, '')
+      .replace(/^[\s\S]*?Based on the search results[,:]?/i, '')
+      .replace(/\[.*?\]\(.*?\)/g, '') // Remove markdown links
+      .replace(/https?:\/\/[^\s]+/g, '') // Remove any remaining URLs
+      .replace(/SOURCE:.*$/gm, '') // Remove SOURCE: lines
+      .trim();
+  }
+  
+  static appendLinksToResponse(response, sources) {
+    if (!response || !sources || sources.length === 0) return response;
+    
+    const links = sources.map(source => source.url).join(' ; ');
+    return `${response} <links> ${links} </links>`;
   }
 }
