@@ -6,27 +6,50 @@ class SystemPromptService {
         this.basePrompts = new Map();
         this.toolInstructions = `
 
-## Tool Usage Instructions
+## 🛠️ TOOL USAGE INSTRUCTIONS - CRITICAL
 
-You have access to tools that can help you perform various tasks. When you need to use a tool:
+You have access to powerful tools that significantly enhance your capabilities. You MUST use these tools proactively to provide better assistance.
 
-1. **Identify the appropriate tool** from the available tools for your current task
-2. **Call the tool** using the proper function calling format
+### WHEN TO USE TOOLS (Be Proactive):
+
+**ALWAYS use tools when the user's request involves:**
+- Mathematical calculations, data analysis, or computations
+- Code execution, testing, or debugging
+- Information lookups or searches
+- File processing or manipulation
+- Complex problem-solving that tools can assist with
+
+**DO NOT ask permission** - use tools immediately when they're relevant to the task.
+
+### HOW TO USE TOOLS:
+
+1. **Identify relevant tools** from the list below for the current task
+2. **Call the tool immediately** using proper function calling format
 3. **Wait for the tool result** before proceeding
-4. **Use the tool result** to continue your response or take further action
+4. **Use the tool result** to provide accurate, enhanced responses
 
-### Important Tool Usage Guidelines:
+### CRITICAL TOOL USAGE GUIDELINES:
 
-- **Always use tools when they can help** - Don't perform tasks manually that tools can do better
-- **One tool call at a time** - Wait for results before making additional tool calls
-- **Handle errors gracefully** - If a tool call fails, acknowledge the error and try alternatives
-- **Explain tool usage** - Briefly explain what you're doing when using tools
-- **Tool results are authoritative** - Trust and use the actual results from tools
+- ✅ **PROACTIVE USAGE**: Use tools without being explicitly asked
+- ✅ **IMMEDIATE ACTION**: Don't hesitate - if a tool can help, use it
+- ✅ **TRUST RESULTS**: Tool outputs are authoritative and accurate
+- ✅ **EXPLAIN BRIEFLY**: Mention what you're doing with tools
+- ✅ **HANDLE ERRORS**: If a tool fails, try alternatives or explain the issue
+- ❌ **NEVER SKIP**: Don't perform manual calculations if tools can do it
+- ❌ **NO PERMISSION**: Don't ask "Would you like me to..." - just use tools
 
-Available tools and their purposes:
+### 📋 AVAILABLE TOOLS:
+
 {{TOOL_DESCRIPTIONS}}
 
-Remember: Tools are provided to enhance your capabilities. Use them effectively to provide better assistance.`;
+### 🎯 EXAMPLES OF PROACTIVE TOOL USAGE:
+
+- User asks "What's 2^100?" → Immediately use code-execution tool
+- User mentions math problem → Use calculator or code-execution tool
+- User asks about complex calculations → Use appropriate computational tool
+- User wants to test code → Use code-execution tool
+
+**REMEMBER: Tools are your superpowers. Use them actively and confidently to provide exceptional assistance!**`;
     }
 
     /**
@@ -42,6 +65,8 @@ Remember: Tools are provided to enhance your capabilities. Use them effectively 
         if (modelId && modelConfigService.isToolsEnabledForModel(modelId)) {
             const availableTools = modelConfigService.getToolsForModel(modelId);
             
+            console.log(`🔧 SystemPromptService: Model ${modelId} has tools enabled. Available tools:`, availableTools?.length || 0);
+            
             if (availableTools && availableTools.length > 0) {
                 const toolDescriptions = this.generateToolDescriptions(availableTools);
                 const toolInstructions = this.toolInstructions.replace(
@@ -55,7 +80,11 @@ Remember: Tools are provided to enhance your capabilities. Use them effectively 
                 } else {
                     enhancedPrompt = toolInstructions;
                 }
+                
+                console.log(`🔧 SystemPromptService: Enhanced system prompt with tools for model ${modelId}`);
             }
+        } else {
+            console.log(`🔧 SystemPromptService: No tools available for model ${modelId}`);
         }
 
         return enhancedPrompt;
@@ -73,10 +102,30 @@ Remember: Tools are provided to enhance your capabilities. Use them effectively 
 
         const descriptions = tools.map(tool => {
             const params = this.formatParameters(tool.parameters);
-            return `• **${tool.name}** (${tool.id}): ${tool.description}${params ? '\n  Parameters: ' + params : ''}`;
+            const usage = this.getToolUsageExamples(tool.id);
+            
+            return `🔧 **${tool.name}** (\`${tool.id}\`)
+   📝 **Purpose**: ${tool.description}
+   ${params ? `📋 **Parameters**: ${params}` : ''}
+   ${usage ? `💡 **Use for**: ${usage}` : ''}`;
         });
 
-        return descriptions.join('\n');
+        return descriptions.join('\n\n');
+    }
+
+    /**
+     * Get usage examples for specific tools
+     * @param {string} toolId - Tool ID
+     * @returns {string} Usage examples
+     */
+    getToolUsageExamples(toolId) {
+        const examples = {
+            'code-execution': 'Mathematical calculations, data analysis, algorithm testing, code debugging, complex computations',
+            'test-calculator': 'Basic arithmetic, mathematical operations, formula calculations',
+            'wolfram-alpha': 'Complex mathematical queries, scientific calculations, data analysis, factual lookups',
+            'test-tool': 'System testing and validation'
+        };
+        return examples[toolId] || 'General purpose tool usage';
     }
 
     /**

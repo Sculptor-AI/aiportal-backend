@@ -85,13 +85,28 @@ export const processAnthropicChat = async (modelType, prompt, imageData = null, 
       content: content
     });
     
-    // Make the API call
-    const completion = await anthropic.messages.create({
+    // Add tools if available for this model
+    const availableTools = modelConfigService.getToolsForModel(modelType);
+    console.log(`🔧 Anthropic Service: Available tools for model ${modelType}:`, availableTools?.length || 0);
+    
+    const requestParams = {
       model: modelName,
       messages: messages,
       system: systemPrompt || undefined,
       max_tokens: 4096,
-    });
+    };
+    
+    if (availableTools && availableTools.length > 0) {
+      requestParams.tools = availableTools.map(tool => ({
+        name: tool.id,
+        description: tool.description,
+        input_schema: tool.parameters
+      }));
+      console.log(`🔧 Anthropic Service: Added ${requestParams.tools.length} tools to request for model ${modelType}`);
+    }
+    
+    // Make the API call
+    const completion = await anthropic.messages.create(requestParams);
     
     // Format response to match OpenRouter format for consistency
     return {
@@ -163,14 +178,29 @@ export const streamAnthropicChat = async (modelType, prompt, imageData = null, s
       content: content
     });
     
-    // Make the streaming API call
-    const stream = await anthropic.messages.create({
+    // Add tools if available for this model
+    const availableTools = modelConfigService.getToolsForModel(modelType);
+    console.log(`🔧 Anthropic Service: Available tools for model ${modelType}:`, availableTools?.length || 0);
+    
+    const requestParams = {
       model: modelName,
       messages: messages,
       system: systemPrompt || undefined,
       max_tokens: 4096,
       stream: true,
-    });
+    };
+    
+    if (availableTools && availableTools.length > 0) {
+      requestParams.tools = availableTools.map(tool => ({
+        name: tool.id,
+        description: tool.description,
+        input_schema: tool.parameters
+      }));
+      console.log(`🔧 Anthropic Service: Added ${requestParams.tools.length} tools to request for model ${modelType}`);
+    }
+    
+    // Make the streaming API call
+    const stream = await anthropic.messages.create(requestParams);
     
     // Process the stream
     for await (const event of stream) {

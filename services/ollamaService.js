@@ -1,4 +1,5 @@
 import axios from 'axios';
+import modelConfigService from './modelConfigService.js';
 
 /**
  * Ollama Service for local model inference
@@ -81,6 +82,22 @@ export class OllamaService {
         messages: ollamaMessages,
         stream: false
       };
+      
+      // Add tools if available for this model
+      const availableTools = modelConfigService.getToolsForModel(modelType);
+      console.log(`🔧 Ollama Service: Available tools for model ${modelType}:`, availableTools?.length || 0);
+      
+      if (availableTools && availableTools.length > 0) {
+        payload.tools = availableTools.map(tool => ({
+          type: 'function',
+          function: {
+            name: tool.id,
+            description: tool.description,
+            parameters: tool.parameters
+          }
+        }));
+        console.log(`🔧 Ollama Service: Added ${payload.tools.length} tools to request for model ${modelType}`);
+      }
 
       console.log(`Sending request to Ollama: ${this.baseURL}/api/chat`);
       
@@ -175,6 +192,22 @@ export class OllamaService {
         messages: ollamaMessages,
         stream: true
       };
+      
+      // Add tools if available for this model
+      const availableTools = modelConfigService.getToolsForModel(modelType);
+      console.log(`🔧 Ollama Service: Available tools for model ${modelType}:`, availableTools?.length || 0);
+      
+      if (availableTools && availableTools.length > 0) {
+        payload.tools = availableTools.map(tool => ({
+          type: 'function',
+          function: {
+            name: tool.id,
+            description: tool.description,
+            parameters: tool.parameters
+          }
+        }));
+        console.log(`🔧 Ollama Service: Added ${payload.tools.length} tools to request for model ${modelType}`);
+      }
 
       console.log(`Sending streaming request to Ollama: ${this.baseURL}/api/chat`);
       

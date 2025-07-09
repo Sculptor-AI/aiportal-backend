@@ -12,7 +12,7 @@
       "name": "Test Tool",
       "description": "A simple tool to test the tools system",
       "version": "1.0.0",
-      "allowedModels": ["openai/gpt-4o"],
+      "allowedModels": [],
       "maxExecutionTime": 5000,
       "requiresAuth": false,
       "rateLimit": {
@@ -25,7 +25,7 @@
       "name": "Code Execution",
       "description": "Securely execute Python code for mathematical computations, data analysis, and problem solving",
       "version": "1.0.0",
-      "allowedModels": ["openai/gpt-4o", "openai/gpt-4o-mini", "openai/gpt-4-turbo"],
+      "allowedModels": [],
       "maxExecutionTime": 15000,
       "requiresAuth": false,
       "rateLimit": {

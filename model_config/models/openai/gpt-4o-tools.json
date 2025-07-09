@@ -38,7 +38,7 @@
   },
   "tools": {
     "enabled": true,
-    "allowedTools": ["test-tool", "wolfram-alpha"],
+    "allowedTools": [],
     "maxConcurrentCalls": 3
   }
 }

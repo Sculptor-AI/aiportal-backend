@@ -54,10 +54,32 @@ export const processGeminiChat = async (modelType, prompt, imageData = null, sys
     
     console.log(`Processing Gemini request with model: ${modelName}`);
     
-    // Configure model with optional grounding
+    // Configure model with optional grounding and custom tools
     const modelConfig = { model: modelName };
+    const toolsArray = [];
+    
     if (useGrounding) {
-      modelConfig.tools = [{ googleSearch: {} }];
+      toolsArray.push({ googleSearch: {} });
+    }
+    
+    // Add custom tools if available for this model
+    const availableTools = modelConfigService.getToolsForModel(modelType);
+    console.log(`🔧 Gemini Service: Available tools for model ${modelType}:`, availableTools?.length || 0);
+    
+    if (availableTools && availableTools.length > 0) {
+      const customTools = availableTools.map(tool => ({
+        functionDeclaration: {
+          name: tool.id,
+          description: tool.description,
+          parameters: tool.parameters
+        }
+      }));
+      toolsArray.push(...customTools);
+      console.log(`🔧 Gemini Service: Added ${customTools.length} custom tools to request for model ${modelType}`);
+    }
+    
+    if (toolsArray.length > 0) {
+      modelConfig.tools = toolsArray;
     }
     
     const model = genAI.getGenerativeModel(modelConfig);
@@ -187,10 +209,32 @@ export const streamGeminiChat = async (modelType, prompt, imageData = null, syst
     
     console.log(`Processing streaming Gemini request with model: ${modelName}`);
     
-    // Configure model with optional grounding
+    // Configure model with optional grounding and custom tools
     const modelConfig = { model: modelName };
+    const toolsArray = [];
+    
     if (useGrounding) {
-      modelConfig.tools = [{ googleSearch: {} }];
+      toolsArray.push({ googleSearch: {} });
+    }
+    
+    // Add custom tools if available for this model
+    const availableTools = modelConfigService.getToolsForModel(modelType);
+    console.log(`🔧 Gemini Service: Available tools for model ${modelType}:`, availableTools?.length || 0);
+    
+    if (availableTools && availableTools.length > 0) {
+      const customTools = availableTools.map(tool => ({
+        functionDeclaration: {
+          name: tool.id,
+          description: tool.description,
+          parameters: tool.parameters
+        }
+      }));
+      toolsArray.push(...customTools);
+      console.log(`🔧 Gemini Service: Added ${customTools.length} custom tools to request for model ${modelType}`);
+    }
+    
+    if (toolsArray.length > 0) {
+      modelConfig.tools = toolsArray;
     }
     
     const model = genAI.getGenerativeModel(modelConfig);

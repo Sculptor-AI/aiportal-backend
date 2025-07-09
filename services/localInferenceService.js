@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
+import modelConfigService from './modelConfigService.js';
 
 /**
  * Local Inference Service for running GGUF models locally
@@ -228,6 +229,22 @@ export class LocalInferenceService {
         max_tokens: 2048,
         stream: false
       };
+      
+      // Add tools if available for this model
+      const availableTools = modelConfigService.getToolsForModel(modelType);
+      console.log(`🔧 Local Inference Service: Available tools for model ${modelType}:`, availableTools?.length || 0);
+      
+      if (availableTools && availableTools.length > 0) {
+        payload.tools = availableTools.map(tool => ({
+          type: 'function',
+          function: {
+            name: tool.id,
+            description: tool.description,
+            parameters: tool.parameters
+          }
+        }));
+        console.log(`🔧 Local Inference Service: Added ${payload.tools.length} tools to request for model ${modelType}`);
+      }
 
       console.log(`Sending request to local model ${cleanModelName} on port ${port}`);
       
@@ -307,6 +324,22 @@ export class LocalInferenceService {
         max_tokens: 2048,
         stream: true
       };
+      
+      // Add tools if available for this model
+      const availableTools = modelConfigService.getToolsForModel(modelType);
+      console.log(`🔧 Local Inference Service: Available tools for model ${modelType}:`, availableTools?.length || 0);
+      
+      if (availableTools && availableTools.length > 0) {
+        payload.tools = availableTools.map(tool => ({
+          type: 'function',
+          function: {
+            name: tool.id,
+            description: tool.description,
+            parameters: tool.parameters
+          }
+        }));
+        console.log(`🔧 Local Inference Service: Added ${payload.tools.length} tools to request for model ${modelType}`);
+      }
 
       console.log(`Sending streaming request to local model ${cleanModelName} on port ${port}`);
       

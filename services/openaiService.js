@@ -140,8 +140,86 @@ export const processOpenAICompatibleChat = async (modelType, prompt, imageData =
       requestParams.max_tokens = parameters.max_tokens;
     }
     
+    // Add tools if available for this model
+    const availableTools = modelConfigService.getToolsForModel(modelType);
+    console.log(`🔧 OpenAI Service: Available tools for model ${modelType}:`, availableTools?.length || 0);
+    if (availableTools && availableTools.length > 0) {
+      requestParams.tools = availableTools.map(tool => ({
+        type: 'function',
+        function: {
+          name: tool.id,
+          description: tool.description,
+          parameters: tool.parameters
+        }
+      }));
+      console.log(`🔧 OpenAI Service: Added ${requestParams.tools.length} tools to request for model ${modelType}`);
+    }
+    
     // Make the API call
     const completion = await openai.chat.completions.create(requestParams);
+    
+    // Check for tool calls and execute them
+    if (completion.choices?.[0]?.message?.tool_calls) {
+      const toolCalls = completion.choices[0].message.tool_calls;
+      const toolResults = [];
+      
+      for (const toolCall of toolCalls) {
+        if (toolCall.function && toolCall.function.name) {
+          try {
+            // Import toolsService here to avoid circular dependency
+            const toolsService = await import('./toolsService.js');
+            const parameters = JSON.parse(toolCall.function.arguments || '{}');
+            const result = await toolsService.default.executeTool(
+              toolCall.function.name, 
+              parameters, 
+              modelType
+            );
+            toolResults.push({
+              tool_call_id: toolCall.id,
+              role: 'tool',
+              content: JSON.stringify(result)
+            });
+          } catch (error) {
+            console.error(`Error executing tool ${toolCall.function.name}:`, error);
+            toolResults.push({
+              tool_call_id: toolCall.id,
+              role: 'tool',
+              content: JSON.stringify({ error: error.message })
+            });
+          }
+        }
+      }
+      
+      // If we have tool results, make another API call with the results
+      if (toolResults.length > 0) {
+        const messagesWithResults = [
+          ...requestParams.messages,
+          completion.choices[0].message, // Add the assistant's message with tool calls
+          ...toolResults // Add tool results
+        ];
+        
+        const followUpParams = {
+          ...requestParams,
+          messages: messagesWithResults
+        };
+        
+        const followUpCompletion = await openai.chat.completions.create(followUpParams);
+        
+        // Return the follow-up completion
+        return {
+          id: followUpCompletion.id,
+          object: followUpCompletion.object,
+          created: followUpCompletion.created,
+          model: modelType, // Return the requested model ID, not the API model name
+          choices: followUpCompletion.choices,
+          usage: {
+            prompt_tokens: (completion.usage?.prompt_tokens || 0) + (followUpCompletion.usage?.prompt_tokens || 0),
+            completion_tokens: (completion.usage?.completion_tokens || 0) + (followUpCompletion.usage?.completion_tokens || 0),
+            total_tokens: (completion.usage?.total_tokens || 0) + (followUpCompletion.usage?.total_tokens || 0)
+          }
+        };
+      }
+    }
     
     // Format response to match OpenRouter format for consistency
     return {
@@ -248,6 +326,7 @@ export const processOpenAIChat = async (modelType, prompt, imageData = null, sys
     
     // Add tools if available for this model
     const availableTools = modelConfigService.getToolsForModel(modelType);
+    console.log(`🔧 OpenAI Service: Available tools for model ${modelType}:`, availableTools?.length || 0);
     if (availableTools && availableTools.length > 0) {
       requestParams.tools = availableTools.map(tool => ({
         type: 'function',
@@ -257,6 +336,7 @@ export const processOpenAIChat = async (modelType, prompt, imageData = null, sys
           parameters: tool.parameters
         }
       }));
+      console.log(`🔧 OpenAI Service: Added ${requestParams.tools.length} tools to request for model ${modelType}`);
     }
     
     // Make the API call
@@ -444,6 +524,21 @@ export const streamOpenAICompatibleChat = async (modelType, prompt, imageData = 
       requestParams.max_tokens = parameters.max_tokens;
     }
     
+    // Add tools if available for this model
+    const availableTools = modelConfigService.getToolsForModel(modelType);
+    console.log(`🔧 OpenAI Service: Available tools for model ${modelType}:`, availableTools?.length || 0);
+    if (availableTools && availableTools.length > 0) {
+      requestParams.tools = availableTools.map(tool => ({
+        type: 'function',
+        function: {
+          name: tool.id,
+          description: tool.description,
+          parameters: tool.parameters
+        }
+      }));
+      console.log(`🔧 OpenAI Service: Added ${requestParams.tools.length} tools to request for model ${modelType}`);
+    }
+    
     // Make the streaming API call
     const stream = await openai.chat.completions.create(requestParams);
     
@@ -567,6 +662,7 @@ export const streamOpenAIChat = async (modelType, prompt, imageData = null, syst
     
     // Add tools if available for this model
     const availableTools = modelConfigService.getToolsForModel(modelType);
+    console.log(`🔧 OpenAI Service: Available tools for model ${modelType}:`, availableTools?.length || 0);
     if (availableTools && availableTools.length > 0) {
       requestParams.tools = availableTools.map(tool => ({
         type: 'function',
@@ -576,6 +672,7 @@ export const streamOpenAIChat = async (modelType, prompt, imageData = null, syst
           parameters: tool.parameters
         }
       }));
+      console.log(`🔧 OpenAI Service: Added ${requestParams.tools.length} tools to request for model ${modelType}`);
     }
     
     // Make the streaming API call
