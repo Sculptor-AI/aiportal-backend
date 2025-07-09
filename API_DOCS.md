@@ -680,6 +680,358 @@ The web search system intelligently prioritizes sources:
 
 ---
 
+### Live Audio Transcription (Gemini Live API)
+
+The AI Portal supports real-time audio transcription powered by Google's Gemini Live API. This feature provides low-latency, real-time voice interactions with advanced audio processing capabilities including Voice Activity Detection, input/output transcription, and both text and audio response modes.
+
+**Key Features:**
+- **Real-time Processing**: Live audio streaming with immediate responses
+- **Voice Activity Detection**: Automatic speech detection and interruption handling
+- **Dual Response Modes**: Text or audio responses (not both simultaneously)
+- **Input/Output Transcription**: Optional transcription of both input and output audio
+- **Session Management**: 15-minute session limits with automatic cleanup
+- **WebSocket Support**: Real-time streaming via WebSocket connections
+- **Multiple Audio Formats**: Support for WebM, WAV, and PCM audio formats
+
+#### Transcribe Audio Chunk
+```http
+POST /api/v1/live-audio/transcribe
+Content-Type: application/json
+X-API-Key: YOUR_API_KEY
+
+{
+  "audio_data": "BASE64_ENCODED_AUDIO_CHUNK",
+  "format": "webm",
+  "sample_rate": 48000,
+  "channels": 1,
+  "session_id": "unique_session_id"
+}
+```
+
+**Parameters:**
+- `audio_data` (string, required): Base64 encoded chunk of audio data
+- `format` (string, required): The audio format (e.g., "webm", "wav", "mp3")
+- `sample_rate` (integer, optional): The sample rate of the audio (default: 48000)
+- `channels` (integer, optional): Number of audio channels (default: 1)
+- `session_id` (string, optional): Session identifier for tracking (default: "default")
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "sessionId": "unique_session_id",
+    "inputTranscription": "This is what the user said",
+    "outputTranscription": "This is what the AI responded (if audio response)",
+    "transcript": "This is the AI's text response",
+    "audioBuffer": "base64_encoded_audio_data",
+    "confidence": 0.95,
+    "timestamp": "2024-07-09T12:00:00.000Z",
+    "model": "gemini-live-2.5-flash-preview",
+    "responseModality": "text"
+  }
+}
+```
+
+#### Start Audio Session
+```http
+POST /api/v1/live-audio/session/start
+Content-Type: application/json
+X-API-Key: YOUR_API_KEY
+
+{
+  "session_id": "unique_session_id",
+  "model": "gemini-live-2.5-flash-preview",
+  "response_modality": "text",
+  "input_transcription": true,
+  "output_transcription": true
+}
+```
+
+**Parameters:**
+- `session_id` (string, required): Unique identifier for the session
+- `model` (string, optional): Gemini model to use (default: "gemini-live-2.5-flash-preview")
+- `response_modality` (string, optional): Response format - "text" or "audio" (default: "text")
+- `input_transcription` (boolean, optional): Enable input audio transcription (default: true)
+- `output_transcription` (boolean, optional): Enable output audio transcription (default: true)
+
+**Available Models:**
+- `gemini-live-2.5-flash-preview` - Half-cascade model (recommended for most use cases)
+- `gemini-2.5-flash-preview-native-audio-dialog` - Native audio with natural speech
+- `gemini-2.5-flash-exp-native-audio-thinking-dialog` - Native audio with thinking capabilities
+- `gemini-2.0-flash-live-001` - Alternative half-cascade model
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "sessionId": "unique_session_id",
+    "status": "active",
+    "startTime": "2024-07-09T12:00:00.000Z",
+    "model": "gemini-live-2.5-flash-preview",
+    "responseModality": "text"
+  }
+}
+```
+
+#### End Audio Session
+```http
+POST /api/v1/live-audio/session/end
+Content-Type: application/json
+X-API-Key: YOUR_API_KEY
+
+{
+  "session_id": "unique_session_id"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "sessionId": "unique_session_id",
+    "status": "ended",
+    "endTime": "2024-07-09T12:00:00.000Z"
+  }
+}
+```
+
+#### Get Session Status
+```http
+GET /api/v1/live-audio/session/{session_id}/status
+X-API-Key: YOUR_API_KEY
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "sessionId": "unique_session_id",
+    "status": "active",
+    "lastActivity": "2024-07-09T12:00:00.000Z"
+  }
+}
+```
+
+#### Live Audio Usage Examples
+
+**JavaScript/Web Audio API:**
+```javascript
+// Start audio session
+const startSession = await fetch('https://api.sculptorai.org/api/v1/live-audio/session/start', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-API-Key': 'ak_your_api_key_here'
+  },
+  body: JSON.stringify({
+    session_id: 'web_session_' + Date.now()
+  })
+});
+
+// Capture audio and send for transcription
+navigator.mediaDevices.getUserMedia({ audio: true })
+  .then(stream => {
+    const mediaRecorder = new MediaRecorder(stream);
+    const chunks = [];
+
+    mediaRecorder.ondataavailable = async (event) => {
+      if (event.data.size > 0) {
+        // Convert audio chunk to base64
+        const arrayBuffer = await event.data.arrayBuffer();
+        const base64Audio = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+        
+        // Send for transcription
+        const response = await fetch('https://api.sculptorai.org/api/v1/live-audio/transcribe', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': 'ak_your_api_key_here'
+          },
+          body: JSON.stringify({
+            audio_data: base64Audio,
+            format: 'webm',
+            sample_rate: 48000,
+            session_id: 'web_session_' + Date.now()
+          })
+        });
+        
+        const result = await response.json();
+        console.log('Transcription:', result.data.transcript);
+      }
+    };
+
+    mediaRecorder.start(1000); // Send chunk every 1 second
+  });
+```
+
+**Python Example:**
+```python
+import requests
+import base64
+import json
+
+# Start session
+session_response = requests.post('https://api.sculptorai.org/api/v1/live-audio/session/start', 
+  headers={
+    'Content-Type': 'application/json',
+    'X-API-Key': 'ak_your_api_key_here'
+  },
+  json={'session_id': 'python_session_123'}
+)
+
+# Read audio file and transcribe
+with open('audio_chunk.webm', 'rb') as audio_file:
+    audio_data = base64.b64encode(audio_file.read()).decode('utf-8')
+    
+    response = requests.post('https://api.sculptorai.org/api/v1/live-audio/transcribe', 
+      headers={
+        'Content-Type': 'application/json',
+        'X-API-Key': 'ak_your_api_key_here'
+      },
+      json={
+        'audio_data': audio_data,
+        'format': 'webm',
+        'sample_rate': 48000,
+        'session_id': 'python_session_123'
+      }
+    )
+    
+    result = response.json()
+    print('Transcription:', result['data']['transcript'])
+```
+
+#### Live Audio Features
+
+- **Real-time Processing**: Audio chunks are processed immediately upon receipt
+- **Session Management**: Track multiple audio sessions simultaneously
+- **Format Support**: Supports common audio formats (webm, wav, mp3)
+- **Confidence Scoring**: Each transcription includes a confidence score
+- **Session Persistence**: Audio chunks are optionally saved for debugging/analysis
+- **Scalable Architecture**: Designed to handle multiple concurrent sessions
+
+#### WebSocket Real-Time Streaming
+
+For real-time streaming applications, use the WebSocket endpoint:
+
+**WebSocket URL:** `ws://api.sculptorai.org/ws/live-audio` (HTTP) or `wss://api.sculptorai.org/ws/live-audio` (HTTPS)
+
+**WebSocket Message Types:**
+
+**Start Session:**
+```json
+{
+  "type": "start_session",
+  "session_id": "unique_session_id",
+  "model": "gemini-live-2.5-flash-preview",
+  "response_modality": "text",
+  "input_transcription": true,
+  "output_transcription": true
+}
+```
+
+**Send Audio Chunk:**
+```json
+{
+  "type": "audio_chunk",
+  "audio_data": "base64_encoded_audio_data",
+  "format": "webm",
+  "sample_rate": 16000,
+  "channels": 1
+}
+```
+
+**End Session:**
+```json
+{
+  "type": "end_session"
+}
+```
+
+**Get Session Status:**
+```json
+{
+  "type": "get_status"
+}
+```
+
+**WebSocket Response Types:**
+
+**Session Started:**
+```json
+{
+  "type": "session_started",
+  "session_id": "unique_session_id",
+  "data": {
+    "sessionId": "unique_session_id",
+    "status": "active",
+    "startTime": "2024-07-09T12:00:00.000Z",
+    "model": "gemini-live-2.5-flash-preview",
+    "responseModality": "text"
+  }
+}
+```
+
+**Transcription Result:**
+```json
+{
+  "type": "transcription_result",
+  "session_id": "unique_session_id",
+  "data": {
+    "sessionId": "unique_session_id",
+    "inputTranscription": "This is what the user said",
+    "transcript": "This is the AI's response",
+    "audioBuffer": "base64_encoded_audio_data",
+    "timestamp": "2024-07-09T12:00:00.000Z"
+  }
+}
+```
+
+**Error:**
+```json
+{
+  "type": "error",
+  "error": "Error message description"
+}
+```
+
+#### Additional Endpoints
+
+**Get Active Sessions:**
+```http
+GET /api/v1/live-audio/sessions
+X-API-Key: YOUR_API_KEY
+```
+
+**Create Streaming Session:**
+```http
+POST /api/v1/live-audio/streaming/start
+Content-Type: application/json
+X-API-Key: YOUR_API_KEY
+
+{
+  "session_id": "unique_session_id",
+  "model": "gemini-live-2.5-flash-preview",
+  "response_modality": "text",
+  "input_transcription": true,
+  "output_transcription": true
+}
+```
+
+#### Important Notes
+
+- **Session Limits**: Each session has a 15-minute maximum duration (Gemini Live API limit)
+- **Audio Format**: Audio is automatically converted to 16-bit PCM, 16kHz, mono for Gemini processing
+- **Response Modality**: You can only choose either "text" OR "audio" response per session, not both
+- **Cleanup**: Sessions are automatically cleaned up after expiration
+- **Environment Variable**: Ensure `GOOGLE_API_KEY` is set in your environment variables
+- **Real-time Processing**: Uses Google's Gemini Live API for actual speech-to-text processing
+
+---
+
 ### Custom Models Management
 
 #### List Custom Models

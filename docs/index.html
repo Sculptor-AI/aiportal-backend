@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Portal API Documentation</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>AI Portal API Documentation</h1>
+            <p>Interactive testing interface for the AI Portal Backend API</p>
+        </header>
+
+        <nav class="nav-tabs">
+            <button class="tab-button active" onclick="showTab('chat')">Chat API</button>
+            <button class="tab-button" onclick="showTab('live-audio')">Live Audio</button>
+            <button class="tab-button" onclick="showTab('auth')">Authentication</button>
+            <button class="tab-button" onclick="showTab('models')">Models</button>
+            <button class="tab-button" onclick="showTab('settings')">Settings</button>
+        </nav>
+
+        <div id="settings" class="tab-content">
+            <h2>API Settings</h2>
+            <div class="form-group">
+                <label for="api-base">Base URL:</label>
+                <input type="text" id="api-base" value="https://api.sculptorai.org">
+            </div>
+            <div class="form-group">
+                <label for="api-key">API Key:</label>
+                <input type="password" id="api-key" placeholder="ak_your_api_key_here">
+            </div>
+            <button onclick="saveSettings()">Save Settings</button>
+        </div>
+
+        <div id="chat" class="tab-content active">
+            <h2>Chat Completions</h2>
+            <div class="endpoint-section">
+                <h3>POST /api/v1/chat/completions</h3>
+                
+                <div class="form-group">
+                    <label for="chat-model">Model:</label>
+                    <select id="chat-model">
+                        <option value="custom/coding-assistant">Custom - Coding Assistant</option>
+                        <option value="custom/creative-writer">Custom - Creative Writer</option>
+                        <option value="custom/data-analyst">Custom - Data Analyst</option>
+                        <option value="custom/fast-responder">Custom - Fast Responder</option>
+                        <option value="anthropic/claude-4-opus">Anthropic - Claude 4 Opus</option>
+                        <option value="anthropic/claude-4-sonnet">Anthropic - Claude 4 Sonnet</option>
+                        <option value="openai/gpt-4o">OpenAI - GPT-4o</option>
+                        <option value="google/gemini-2.5-flash">Google - Gemini 2.5 Flash</option>
+                        <option value="google/gemini-2.5-pro">Google - Gemini 2.5 Pro</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="chat-message">Message:</label>
+                    <textarea id="chat-message" placeholder="Enter your message here..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="web-search"> Enable Web Search
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="stream"> Enable Streaming
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label for="temperature">Temperature:</label>
+                    <input type="range" id="temperature" min="0" max="1" step="0.1" value="0.7">
+                    <span id="temperature-value">0.7</span>
+                </div>
+
+                <button onclick="sendChatRequest()">Send Chat Request</button>
+                <button onclick="clearChatResponse()">Clear Response</button>
+
+                <div id="chat-response" class="response-section"></div>
+            </div>
+        </div>
+
+        <div id="live-audio" class="tab-content">
+            <h2>Live Audio Transcription</h2>
+            
+            <div class="endpoint-section">
+                <h3>Audio Session Management</h3>
+                
+                <div class="form-group">
+                    <label for="session-id">Session ID:</label>
+                    <input type="text" id="session-id" placeholder="Enter session ID">
+                    <button onclick="generateSessionId()">Generate ID</button>
+                </div>
+
+                <div class="button-group">
+                    <button onclick="startSession()">Start Session</button>
+                    <button onclick="endSession()">End Session</button>
+                    <button onclick="getSessionStatus()">Get Status</button>
+                </div>
+                
+                <h4>WebSocket Streaming (Real-time)</h4>
+                <div class="button-group">
+                    <button onclick="connectWebSocket()">Connect WebSocket</button>
+                    <button onclick="startStreamingSession()">Start Streaming Session</button>
+                    <button onclick="endStreamingSession()">End Streaming Session</button>
+                </div>
+
+                <div id="session-response" class="response-section"></div>
+            </div>
+
+            <div class="endpoint-section">
+                <h3>Audio Transcription</h3>
+                
+                <div class="form-group">
+                    <label for="audio-format">Audio Format:</label>
+                    <select id="audio-format">
+                        <option value="webm">WebM</option>
+                        <option value="wav">WAV</option>
+                        <option value="mp3">MP3</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="sample-rate">Sample Rate:</label>
+                    <input type="number" id="sample-rate" value="48000">
+                </div>
+
+                <div class="form-group">
+                    <label for="audio-file">Audio File:</label>
+                    <input type="file" id="audio-file" accept="audio/*">
+                </div>
+
+                <button onclick="transcribeAudio()">Transcribe Audio</button>
+                <button onclick="startRecording()">Start Recording</button>
+                <button onclick="stopRecording()">Stop Recording</button>
+                
+                <h4>Real-time Streaming</h4>
+                <button onclick="startStreamingRecording()">Start Streaming</button>
+                <button onclick="stopStreamingRecording()">Stop Streaming</button>
+
+                <div id="recording-status" class="status-section"></div>
+                <div id="transcription-response" class="response-section"></div>
+            </div>
+        </div>
+
+        <div id="auth" class="tab-content">
+            <h2>Authentication</h2>
+            
+            <div class="endpoint-section">
+                <h3>Register User</h3>
+                <div class="form-group">
+                    <label for="reg-username">Username:</label>
+                    <input type="text" id="reg-username">
+                </div>
+                <div class="form-group">
+                    <label for="reg-email">Email:</label>
+                    <input type="email" id="reg-email">
+                </div>
+                <div class="form-group">
+                    <label for="reg-password">Password:</label>
+                    <input type="password" id="reg-password">
+                </div>
+                <button onclick="registerUser()">Register</button>
+                <div id="register-response" class="response-section"></div>
+            </div>
+
+            <div class="endpoint-section">
+                <h3>Login</h3>
+                <div class="form-group">
+                    <label for="login-username">Username:</label>
+                    <input type="text" id="login-username">
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Password:</label>
+                    <input type="password" id="login-password">
+                </div>
+                <button onclick="loginUser()">Login</button>
+                <div id="login-response" class="response-section"></div>
+            </div>
+
+            <div class="endpoint-section">
+                <h3>Generate API Key</h3>
+                <div class="form-group">
+                    <label for="key-name">Key Name:</label>
+                    <input type="text" id="key-name" placeholder="My Development Key">
+                </div>
+                <button onclick="generateApiKey()">Generate API Key</button>
+                <div id="api-key-response" class="response-section"></div>
+            </div>
+        </div>
+
+        <div id="models" class="tab-content">
+            <h2>Models</h2>
+            
+            <div class="endpoint-section">
+                <h3>List Models</h3>
+                <button onclick="listModels()">Get Available Models</button>
+                <div id="models-response" class="response-section"></div>
+            </div>
+
+            <div class="endpoint-section">
+                <h3>Custom Models</h3>
+                <button onclick="listCustomModels()">List Custom Models</button>
+                <div id="custom-models-response" class="response-section"></div>
+            </div>
+        </div>
+
+        <div id="loading" class="loading">Loading...</div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

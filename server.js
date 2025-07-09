@@ -2,9 +2,11 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import https from 'https';
+import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
+import { WebSocketServer } from 'ws';
 import { router as apiRouter } from './routes/api.js';
 import imageGenerationRoutes from './routes/imageGenerationRoutes.js';
 import rssRoutes from './routes/rssRoutes.js';
@@ -13,12 +15,14 @@ import routerboxRoutes from './routes/routerboxRoutes.js';
 import customModelRoutes from './routes/customModelRoutes.js';
 import usageRoutes from './routes/usageRoutes.js';
 import rateLimitRoutes from './routes/rateLimitRoutes.js';
+import liveAudioRoutes from './routes/liveAudioRoutes.js';
 import adminRoutes from './admin/adminRoutes.js';
 import { setupAdmin } from './admin/setup.js';
 import database from './database/connection.js';
 import modelConfigService from './services/modelConfigService.js';
 import rateLimitQueueService from './services/rateLimitQueueService.js';
 import toolsService from './services/toolsService.js';
+import { handleWebSocketConnection, cleanupExpiredSessions } from './controllers/liveAudioController.js';
 
 // Load environment variables
 dotenv.config();
@@ -84,6 +88,7 @@ app.use('/api/v1/chat', routerboxRoutes); // Main Routerbox endpoint
 app.use('/api/v1/custom-models', customModelRoutes); // Custom model management
 app.use('/api/v1/usage', usageRoutes); // Usage statistics
 app.use('/api/v1/rate-limits', rateLimitRoutes); // Rate limit management
+app.use('/api/v1/live-audio', liveAudioRoutes); // Live audio transcription
 app.use('/api', apiRouter);
 app.use('/api/v1/images', imageGenerationRoutes);
 app.use('/api/rss', rssRoutes);
@@ -148,6 +153,7 @@ async function startServer() {
           console.log(`CORS enabled for: local network and specified domains`);
           console.log('Database connected and ready');
           console.log(`Health check: https://localhost:${PORT === 443 ? '' : ':' + PORT}/health`);
+          console.log(`🎙️ WebSocket Live Audio: wss://localhost:${PORT === 443 ? '' : ':' + PORT}/ws/live-audio`);
           if (PORT !== 443) {
             console.log(`📖 WSL Network Setup Required - see instructions below`);
             console.log(`\n🔧 WSL Network Setup:`);
@@ -169,7 +175,7 @@ async function startServer() {
       console.warn('⚠️  Starting in HTTP mode - This is insecure for production!');
       console.log('💡 To enable HTTPS, set SSL_CERT_PATH and SSL_KEY_PATH environment variables');
       
-      server = app.listen(PORT, '0.0.0.0', () => {
+      server = http.createServer(app).listen(PORT, '0.0.0.0', () => {
         console.log(`⚠️  HTTP Server running on port ${PORT} (INSECURE)`);
         console.log(`Local access: http://localhost:${PORT === 80 ? '' : ':' + PORT}`);
         console.log(`WSL access: http://172.24.74.81:${PORT === 80 ? '' : ':' + PORT}`);
@@ -177,6 +183,7 @@ async function startServer() {
         console.log(`CORS enabled for: local network and specified domains`);
         console.log('Database connected and ready');
         console.log(`Health check: http://localhost:${PORT === 80 ? '' : ':' + PORT}/health`);
+        console.log(`🎙️ WebSocket Live Audio: ws://localhost:${PORT === 80 ? '' : ':' + PORT}/ws/live-audio`);
         if (PORT !== 80) {
           console.log(`📖 WSL Network Setup Required - see instructions below`);
           console.log(`\n🔧 WSL Network Setup:`);
@@ -188,6 +195,21 @@ async function startServer() {
         }
       });
     }
+
+    // Setup WebSocket server for live audio
+    const wss = new WebSocketServer({ 
+      server,
+      path: '/ws/live-audio'
+    });
+
+    wss.on('connection', handleWebSocketConnection);
+
+    console.log('🎙️ WebSocket server for live audio initialized');
+
+    // Setup session cleanup interval (every 5 minutes)
+    setInterval(() => {
+      cleanupExpiredSessions();
+    }, 5 * 60 * 1000);
 
     server.on('error', (err) => {
       if (err.code === 'EADDRINUSE') {
