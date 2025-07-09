@@ -9,13 +9,14 @@ const router = express.Router();
 // Rate limiting for auth endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 requests per windowMs
+  max: 20, // Limit each IP to 20 requests per windowMs
   message: {
     success: false,
     error: 'Too many authentication attempts, please try again later.'
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => req.ip,
 });
 
 const registerLimiter = rateLimit({
@@ -27,6 +28,7 @@ const registerLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => req.ip,
 });
 
 // Register new user

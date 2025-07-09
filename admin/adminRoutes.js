@@ -20,6 +20,7 @@ const adminLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => req.ip,
 });
 
 // Apply rate limiting to all admin routes

@@ -244,7 +244,24 @@ class LiveAudioService {
       // Convert to 16-bit PCM, 16kHz, mono (required by Gemini Live API)
       wav.toSampleRate(16000);
       wav.toBitDepth('16');
-      wav.toMono();
+      
+      // Convert to mono manually (wavefile doesn't have toMono method)
+      if (wav.fmt.numChannels > 1) {
+        const samples = wav.getSamples(false); // Get de-interleaved samples
+        const monoSamples = [];
+        
+        // Average channels to create mono
+        for (let i = 0; i < samples[0].length; i++) {
+          let sum = 0;
+          for (let channel = 0; channel < samples.length; channel++) {
+            sum += samples[channel][i];
+          }
+          monoSamples.push(sum / samples.length);
+        }
+        
+        // Create new mono wav file
+        wav.fromScratch(1, wav.fmt.sampleRate, wav.bitDepth, monoSamples);
+      }
       
       // Return as base64 string
       return wav.toBase64();
