@@ -61,3 +61,4 @@ admin/admin-users.json
 *.Identifier
 fronted
 /llama.cpp
+/frontend
