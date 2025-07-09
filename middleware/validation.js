@@ -118,4 +118,33 @@ export const validateSearchProcessRequest = (req, res, next) => {
   }
   
   next();
-}; 
+};
+
+/**
+ * Validate deep research request
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+export const validateDeepResearchRequest = (req, res, next) => {
+  const { query, model } = req.body;
+  
+  if (!query || typeof query !== 'string') {
+    return res.status(400).json({ error: 'Query is required and must be a string' });
+  }
+  
+  if (!model || typeof model !== 'string') {
+    return res.status(400).json({ error: 'Model is required and must be a string' });
+  }
+  
+  // Validate maxAgents if provided
+  if (req.body.maxAgents !== undefined) {
+    const maxAgents = parseInt(req.body.maxAgents, 10);
+    if (isNaN(maxAgents) || maxAgents < 2 || maxAgents > 12) {
+      return res.status(400).json({ error: 'maxAgents must be a number between 2 and 12' });
+    }
+    req.body.maxAgents = maxAgents;
+  }
+  
+  next();
+};

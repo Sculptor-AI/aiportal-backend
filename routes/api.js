@@ -2,7 +2,8 @@ import express from 'express';
 import { completeChat, streamChat } from '../controllers/chatController.js';
 import { getModels } from '../controllers/modelController.js';
 import { searchWeb, scrapeUrl, searchAndProcess } from '../controllers/searchController.js';
-import { validateChatRequest, validateSearchRequest, validateScrapeRequest, validateSearchProcessRequest } from '../middleware/validation.js';
+import { processDeepResearch } from '../controllers/deepResearchController.js';
+import { validateChatRequest, validateSearchRequest, validateScrapeRequest, validateSearchProcessRequest, validateDeepResearchRequest } from '../middleware/validation.js';
 import { protect, optionalAuth } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
@@ -18,5 +19,8 @@ router.post('/chat/stream', protect, validateChatRequest, streamChat);
 router.post('/search', protect, validateSearchRequest, searchWeb);
 router.post('/scrape', protect, validateScrapeRequest, scrapeUrl);
 router.post('/search-process', protect, validateSearchProcessRequest, searchAndProcess);
+
+// Deep research endpoint
+router.post('/deep-research', protect, validateDeepResearchRequest, processDeepResearch);
 
 export { router }; 

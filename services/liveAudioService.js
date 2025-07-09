@@ -1,5 +1,6 @@
 import { GoogleGenAI, Modality } from '@google/genai';
-import { WaveFile } from 'wavefile';
+import pkg from 'wavefile';
+const { WaveFile } = pkg;
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';

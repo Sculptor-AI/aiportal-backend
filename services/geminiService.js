@@ -43,7 +43,7 @@ export const isGeminiModel = (modelId) => {
 /**
  * Process a non-streaming Gemini chat request
  */
-export const processGeminiChat = async (modelType, prompt, imageData = null, systemPrompt = null, conversationHistory = []) => {
+export const processGeminiChat = async (modelType, prompt, imageData = null, systemPrompt = null, conversationHistory = [], useGrounding = false) => {
   try {
     const genAI = initializeGeminiClient();
     if (!genAI) {
@@ -54,7 +54,13 @@ export const processGeminiChat = async (modelType, prompt, imageData = null, sys
     
     console.log(`Processing Gemini request with model: ${modelName}`);
     
-    const model = genAI.getGenerativeModel({ model: modelName });
+    // Configure model with optional grounding
+    const modelConfig = { model: modelName };
+    if (useGrounding) {
+      modelConfig.tools = [{ googleSearch: {} }];
+    }
+    
+    const model = genAI.getGenerativeModel(modelConfig);
     
     // If we have conversation history, use chat session
     if (conversationHistory && conversationHistory.length > 0) {
@@ -170,7 +176,7 @@ export const processGeminiChat = async (modelType, prompt, imageData = null, sys
 /**
  * Process a streaming Gemini chat request
  */
-export const streamGeminiChat = async (modelType, prompt, imageData = null, systemPrompt = null, onChunk, conversationHistory = []) => {
+export const streamGeminiChat = async (modelType, prompt, imageData = null, systemPrompt = null, onChunk, conversationHistory = [], useGrounding = false) => {
   try {
     const genAI = initializeGeminiClient();
     if (!genAI) {
@@ -181,7 +187,13 @@ export const streamGeminiChat = async (modelType, prompt, imageData = null, syst
     
     console.log(`Processing streaming Gemini request with model: ${modelName}`);
     
-    const model = genAI.getGenerativeModel({ model: modelName });
+    // Configure model with optional grounding
+    const modelConfig = { model: modelName };
+    if (useGrounding) {
+      modelConfig.tools = [{ googleSearch: {} }];
+    }
+    
+    const model = genAI.getGenerativeModel(modelConfig);
     
     // If we have conversation history, use chat session
     if (conversationHistory && conversationHistory.length > 0) {
@@ -301,6 +313,59 @@ export const streamGeminiChat = async (modelType, prompt, imageData = null, syst
 };
 
 /**
+ * Process a grounded search request with Google Search
+ */
+export const processGroundedSearch = async (modelType, query) => {
+  try {
+    const genAI = initializeGeminiClient();
+    if (!genAI) {
+      throw new Error("Gemini API is not configured. Please set GEMINI_API_KEY environment variable.");
+    }
+    
+    const modelName = getApiModelName(modelType);
+    
+    console.log(`Processing grounded search request with model: ${modelName}`);
+    
+    // Configure model with Google Search grounding
+    const model = genAI.getGenerativeModel({ 
+      model: modelName,
+      tools: [{ googleSearch: {} }]
+    });
+    
+    const result = await model.generateContent(query);
+    const response = await result.response;
+    const text = response.text();
+    
+    // Extract grounding metadata if available
+    const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
+    
+    return {
+      id: `gemini-grounded-${Date.now()}`,
+      object: 'grounded.search.completion',
+      created: Math.floor(Date.now() / 1000),
+      model: modelType,
+      choices: [{
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: text
+        },
+        finish_reason: 'stop'
+      }],
+      groundingMetadata: groundingMetadata || null,
+      usage: {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0
+      }
+    };
+  } catch (error) {
+    console.error('Error in grounded search:', error);
+    throw error;
+  }
+};
+
+/**
  * Get available Gemini models
  */
 export const getGeminiModels = () => {
@@ -333,4 +398,15 @@ export const getGeminiModels = () => {
       isBackendModel: true
     }
   ];
-}; 
+};
+
+// Export the service object
+const geminiService = {
+  isGeminiModel,
+  processGeminiChat,
+  streamGeminiChat,
+  processGroundedSearch,
+  getGeminiModels
+};
+
+export default geminiService; 
