@@ -57,3 +57,7 @@ Instructions.txt
 plan.md
 SECURITY.md
 SETUP_GUIDE.md 
+admin/admin-users.json
+*.Identifier
+fronted
+/llama.cpp

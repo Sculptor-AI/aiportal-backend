@@ -26,6 +26,9 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust Cloudflare proxy - must be set before rate limiting middleware
+app.set('trust proxy', true);
+
 // CORS disabled - allow all origins
 const corsOptions = {
   origin: true, // Allow all origins
@@ -53,9 +56,6 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Headers', '*');
   res.header('Access-Control-Expose-Headers', '*');
   res.header('Access-Control-Allow-Credentials', 'true');
-  
-  // Trust Cloudflare proxy
-  app.set('trust proxy', true);
   
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -98,10 +98,12 @@ app.get('/health', (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  console.error('Error occurred:', err.message);
+  console.error('Error stack:', err.stack);
   res.status(500).json({
     error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'production' ? 'Something went wrong' : err.message
+    message: process.env.NODE_ENV === 'production' ? 'Something went wrong' : err.message,
+    details: process.env.NODE_ENV !== 'production' ? err.stack : undefined
   });
 });
 
