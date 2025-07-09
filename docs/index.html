@@ -14,12 +14,275 @@
         </header>
 
         <nav class="nav-tabs">
-            <button class="tab-button active" onclick="showTab('chat')">Chat API</button>
+            <button class="tab-button active" onclick="showTab('overview')">Overview</button>
+            <button class="tab-button" onclick="showTab('setup')">Setup</button>
+            <button class="tab-button" onclick="showTab('chat')">Chat API</button>
             <button class="tab-button" onclick="showTab('live-audio')">Live Audio</button>
             <button class="tab-button" onclick="showTab('auth')">Authentication</button>
             <button class="tab-button" onclick="showTab('models')">Models</button>
+            <button class="tab-button" onclick="showTab('examples')">Examples</button>
+            <button class="tab-button" onclick="showTab('troubleshooting')">Troubleshooting</button>
             <button class="tab-button" onclick="showTab('settings')">Settings</button>
         </nav>
+
+        <div id="overview" class="tab-content active">
+            <h2>AI Portal Backend</h2>
+            <p>A secure, scalable "Routerbox" system providing OpenAI-compatible API endpoints with support for multiple AI providers and custom model definitions.</p>
+            
+            <h3>🚀 Quick Start</h3>
+            <pre><code>npm install
+npm start
+npm run network  # Get your network IP</code></pre>
+            
+            <p>Test with any model:</p>
+            <pre><code>curl -X POST http://YOUR_IP:3000/api/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -d '{"model": "custom/coding-assistant", "messages": [{"role": "user", "content": "Hello!"}]}'</code></pre>
+            
+            <h3>🔧 Key Features</h3>
+            <ul>
+                <li><strong>OpenAI-Compatible API</strong> - Drop-in replacement for OpenAI API</li>
+                <li><strong>Multi-Provider Support</strong> - Anthropic, OpenAI, Google, OpenRouter, Ollama</li>
+                <li><strong>Local Model Inference</strong> - Run models locally with Ollama (privacy-focused)</li>
+                <li><strong>Streaming-First</strong> - All APIs now default to streaming responses</li>
+                <li><strong>Latest Models</strong> - Includes 2024-2025's best models (Llama 4, Claude 3.7, o3)</li>
+                <li><strong>Custom Models</strong> - Create GPT-like custom assistants</li>
+                <li><strong>Network Access</strong> - Use from any device on your network</li>
+                <li><strong>Rate Limiting</strong> - Per-user, per-model limits</li>
+                <li><strong>Authentication</strong> - JWT + API key dual system</li>
+                <li><strong>Security</strong> - Input validation, CORS, secure storage</li>
+            </ul>
+        </div>
+
+        <div id="setup" class="tab-content">
+            <h2>Setup and Configuration Guide</h2>
+            
+            <h3>Quick Start</h3>
+            <h4>1. Install & Start</h4>
+            <pre><code>npm install
+npm start</code></pre>
+            
+            <h4>2. Find Your Network IP</h4>
+            <pre><code>npm run network</code></pre>
+            
+            <h4>3. Create User & API Key</h4>
+            <pre><code># Register (replace IP with your network IP)
+curl -X POST http://YOUR_IP:3000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"myuser","password":"Pass123!","email":"my@email.com"}'
+
+# Login to get JWT token
+curl -X POST http://YOUR_IP:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"myuser","password":"Pass123!"}'
+
+# Generate API key (use JWT token from login)
+curl -X POST http://YOUR_IP:3000/api/auth/api-keys \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{"keyName":"My Key"}'</code></pre>
+            
+            <h3>Configuration</h3>
+            <h4>Environment Variables (.env)</h4>
+            <pre><code># Server
+PORT=3000
+NODE_ENV=development
+
+# Auth
+JWT_SECRET=your-secret-key
+
+# Provider API Keys (optional - get from provider websites)
+OPENROUTER_API_KEY=sk-or-v1-your-key
+ANTHROPIC_API_KEY=sk-ant-your-key  
+OPENAI_API_KEY=sk-your-key
+GOOGLE_API_KEY=your-key
+
+# Ollama (for local models)
+OLLAMA_BASE_URL=http://localhost:11434</code></pre>
+            
+            <h4>Real API Keys</h4>
+            <p>For actual AI responses, get keys from:</p>
+            <ul>
+                <li><strong>OpenRouter</strong>: <a href="https://openrouter.ai/" target="_blank">https://openrouter.ai/</a> (Recommended - all models)</li>
+                <li><strong>Anthropic</strong>: <a href="https://console.anthropic.com/" target="_blank">https://console.anthropic.com/</a></li>
+                <li><strong>OpenAI</strong>: <a href="https://platform.openai.com/" target="_blank">https://platform.openai.com/</a></li>
+                <li><strong>Google</strong>: <a href="https://ai.google.dev/" target="_blank">https://ai.google.dev/</a></li>
+                <li><strong>Ollama</strong>: <a href="https://ollama.com/" target="_blank">https://ollama.com/</a> (Free local models - no API key needed)</li>
+            </ul>
+            
+            <h3>Network Access</h3>
+            <p><strong>✅ Now enabled for local network access!</strong></p>
+            <ul>
+                <li><strong>Local</strong>: <code>http://localhost:3000</code></li>
+                <li><strong>Network</strong>: <code>http://YOUR_IP:3000</code> (accessible from phones, tablets, other computers)</li>
+                <li><strong>CORS</strong>: Automatically allows all local network requests (192.168.x.x, 10.x.x.x, etc.)</li>
+            </ul>
+            
+            <h3>Authentication</h3>
+            <p>Two methods supported:</p>
+            
+            <h4>API Keys (Recommended)</h4>
+            <pre><code>X-API-Key: ak_your_api_key_here</code></pre>
+            
+            <h4>JWT Tokens</h4>
+            <pre><code>Authorization: Bearer your_jwt_token_here</code></pre>
+            
+            <h3>Management Commands</h3>
+            <pre><code>npm start          # Start server
+npm run network    # Show network IPs  
+npm test          # Run tests
+npm run dev       # Development mode</code></pre>
+            
+            <h3>Health Check</h3>
+            <pre><code>curl http://YOUR_IP:3000/health</code></pre>
+            <p>Should return: <code>{"status":"OK","message":"Server is running"}</code></p>
+        </div>
+
+        <div id="examples" class="tab-content">
+            <h2>Usage Examples</h2>
+            
+            <h3>JavaScript (OpenAI SDK Compatible)</h3>
+            
+            <h4>Non-streaming</h4>
+            <pre><code>const response = await fetch('http://YOUR_IP:3000/api/v1/chat/completions', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-API-Key': 'ak_your_api_key'
+  },
+  body: JSON.stringify({
+    model: 'custom/coding-assistant',
+    messages: [{ role: 'user', content: 'Hello!' }],
+    stream: false
+  })
+});
+const data = await response.json();
+console.log(data.choices[0].message.content);</code></pre>
+            
+            <h4>Streaming</h4>
+            <pre><code>const response = await fetch('http://YOUR_IP:3000/api/v1/chat/completions', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-API-Key': 'ak_your_api_key'
+  },
+  body: JSON.stringify({
+    model: 'custom/coding-assistant',
+    messages: [{ role: 'user', content: 'Hello!' }],
+    stream: true
+  })
+});
+
+const reader = response.body.getReader();
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  const chunk = new TextDecoder().decode(value);
+  console.log(chunk);
+}</code></pre>
+            
+            <h3>Python</h3>
+            <pre><code>import requests
+
+response = requests.post('http://YOUR_IP:3000/api/v1/chat/completions',
+  headers={'X-API-Key': 'ak_your_api_key'},
+  json={
+    'model': 'custom/data-analyst', 
+    'messages': [{'role': 'user', 'content': 'Analyze this data...'}]
+  }
+)</code></pre>
+            
+            <h3>cURL Examples</h3>
+            
+            <h4>Streaming (default)</h4>
+            <pre><code>curl -X POST http://YOUR_IP:3000/api/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -d '{
+    "model": "custom/coding-assistant",
+    "messages": [
+      {"role": "user", "content": "Write a Python function to reverse a string"}
+    ],
+    "stream": true
+  }'</code></pre>
+            
+            <h4>Non-streaming (clean JSON)</h4>
+            <pre><code>curl -X POST http://YOUR_IP:3000/api/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -d '{
+    "model": "custom/coding-assistant",
+    "messages": [
+      {"role": "user", "content": "Write a Python function to reverse a string"}
+    ],
+    "stream": false
+  }'</code></pre>
+            
+            <h3>Ollama (Local Models)</h3>
+            <pre><code># First install Ollama: https://ollama.com/
+# Pull a model locally
+ollama pull llama3.2
+
+# Use with your backend
+curl -X POST http://YOUR_IP:3000/api/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ak_your_api_key" \
+  -d '{
+    "model": "ollama/llama3.2",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "stream": true
+  }'</code></pre>
+            
+            <h3>Local GGUF Models (llama.cpp)</h3>
+            <pre><code># Setup Llama 3.2 1B (lightweight, fast)
+./scripts/setup-llama3.2-1b.sh
+
+# Use the local model
+curl -X POST http://YOUR_IP:3000/api/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ak_your_api_key" \
+  -d '{
+    "model": "local/llama3.2-1b",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "stream": false
+  }'</code></pre>
+            
+            <h3>Mobile Apps</h3>
+            <p>Use your network IP (<code>http://YOUR_IP:3000</code>) in your mobile app's API configuration.</p>
+        </div>
+
+        <div id="troubleshooting" class="tab-content">
+            <h2>Troubleshooting</h2>
+            
+            <h3>Common Issues</h3>
+            
+            <h4>Port in use</h4>
+            <pre><code>PORT=3001 npm start</code></pre>
+            
+            <h4>Can't connect from other devices</h4>
+            <ul>
+                <li>Check firewall settings</li>
+                <li>Use network IP, not localhost</li>
+                <li>Run <code>npm run network</code> to see your IP</li>
+            </ul>
+            
+            <h4>Invalid API key</h4>
+            <ul>
+                <li>Use <code>X-API-Key</code> header for API keys (starts with <code>ak_</code>)</li>
+                <li>Use <code>Authorization: Bearer</code> for JWT tokens</li>
+            </ul>
+            
+            <h4>No AI response</h4>
+            <ul>
+                <li>Check you have real API keys in .env</li>
+                <li>Custom models work without real keys for testing</li>
+            </ul>
+            
+            <h3>Health Check</h3>
+            <pre><code>curl http://YOUR_IP:3000/health</code></pre>
+            <p>Should return: <code>{"status":"OK","message":"Server is running"}</code></p>
+        </div>
 
         <div id="settings" class="tab-content">
             <h2>API Settings</h2>
@@ -34,7 +297,7 @@
             <button onclick="saveSettings()">Save Settings</button>
         </div>
 
-        <div id="chat" class="tab-content active">
+        <div id="chat" class="tab-content">
             <h2>Chat Completions</h2>
             <div class="endpoint-section">
                 <h3>POST /api/v1/chat/completions</h3>
@@ -194,17 +457,60 @@
         </div>
 
         <div id="models" class="tab-content">
-            <h2>Models</h2>
+            <h2>Available Models</h2>
+            
+            <h3>Custom Models (Pre-configured)</h3>
+            <ul>
+                <li><code>custom/coding-assistant</code> - Programming help (Claude Sonnet)</li>
+                <li><code>custom/creative-writer</code> - Creative writing (Claude Opus)</li>
+                <li><code>custom/data-analyst</code> - Data analysis (GPT-4o)</li>
+                <li><code>custom/fast-responder</code> - Quick answers (Gemini Flash)</li>
+            </ul>
+            
+            <h3>Direct Provider Models</h3>
+            <ul>
+                <li><code>anthropic/claude-4-opus</code> - Claude 4 Opus</li>
+                <li><code>anthropic/claude-4-sonnet</code> - Claude 4 Sonnet</li>
+                <li><code>openai/gpt-4o</code> - GPT-4o</li>
+                <li><code>openai/o3</code> - ChatGPT o3</li>
+                <li><code>google/gemini-2.5-flash</code> - Gemini 2.5 Flash</li>
+                <li><code>google/gemini-2.5-pro</code> - Gemini 2.5 Pro</li>
+            </ul>
+            
+            <h3>Local Models (Ollama)</h3>
+            <ul>
+                <li><code>ollama/llama3.2</code> - Llama 3.2 (local inference)</li>
+                <li><code>ollama/codellama</code> - Code Llama (local inference)</li>
+                <li><code>ollama/mistral</code> - Mistral (local inference)</li>
+                <li><code>ollama/[any-model]</code> - Any model you have installed in Ollama</li>
+            </ul>
+            
+            <h3>Local Models (GGUF/llama.cpp)</h3>
+            <ul>
+                <li><code>local/llama3.2-1b</code> - Llama 3.2 1B Instruct (lightweight, fast)</li>
+                <li><code>local/[model-folder]</code> - Any GGUF model in your models directory</li>
+            </ul>
+            
+            <h3>Latest 2024-2025 Models (OpenRouter)</h3>
+            <ul>
+                <li><code>meta-llama/llama-4-behemoth</code> - Meta's flagship 288B parameter model</li>
+                <li><code>meta-llama/llama-4-maverick</code> - 17B parameter multimodal model</li>
+                <li><code>anthropic/claude-3.7-sonnet</code> - Latest Claude with hybrid reasoning</li>
+                <li><code>google/gemini-2.5-pro</code> - Enhanced complex problem-solving</li>
+                <li><code>openai/o3-pro</code> - Highest intelligence model</li>
+                <li><code>alibaba/qwen2.5-max</code> - Top-tier Chinese model</li>
+                <li><code>deepseek/deepseek-v3</code> - Advanced reasoning model</li>
+            </ul>
             
             <div class="endpoint-section">
-                <h3>List Models</h3>
-                <button onclick="listModels()">Get Available Models</button>
+                <h3>Interactive Model Testing</h3>
+                <button onclick="listModels()">Get Available Models (Live)</button>
                 <div id="models-response" class="response-section"></div>
             </div>
 
             <div class="endpoint-section">
-                <h3>Custom Models</h3>
-                <button onclick="listCustomModels()">List Custom Models</button>
+                <h3>Custom Models API</h3>
+                <button onclick="listCustomModels()">List Custom Models (Live)</button>
                 <div id="custom-models-response" class="response-section"></div>
             </div>
         </div>

@@ -19,6 +19,19 @@
         "requests": 10,
         "window": "1m"
       }
+    },
+    "code-execution": {
+      "enabled": true,
+      "name": "Code Execution",
+      "description": "Securely execute Python code for mathematical computations, data analysis, and problem solving",
+      "version": "1.0.0",
+      "allowedModels": ["openai/gpt-4o", "openai/gpt-4o-mini", "openai/gpt-4-turbo"],
+      "maxExecutionTime": 15000,
+      "requiresAuth": false,
+      "rateLimit": {
+        "requests": 20,
+        "window": "5m"
+      }
     }
   }
 }

@@ -5,6 +5,7 @@ import { AuthService } from '../utils/auth.js';
 import rateLimit from 'express-rate-limit';
 import modelConfigService from '../services/modelConfigService.js';
 import toolsService from '../services/toolsService.js';
+import adminToolsRoutes from '../routes/adminToolsRoutes.js';
 import bcrypt from 'bcrypt';
 
 const router = express.Router();
@@ -551,5 +552,8 @@ router.get('/tools/executions', requireAdmin, async (req, res) => {
     });
   }
 });
+
+// Mount admin tools routes
+router.use('/tools', adminToolsRoutes);
 
 export default router;

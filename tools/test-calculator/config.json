@@ -1,0 +1,48 @@
+{
+  "id": "test-calculator",
+  "name": "Test Calculator",
+  "description": "A simple calculator tool for testing",
+  "version": "1.0.0",
+  "enabled": true,
+  "allowedModels": [],
+  "maxExecutionTime": 30000,
+  "requiresAuth": false,
+  "rateLimit": {
+    "requests": 10,
+    "window": "1m"
+  },
+  "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "returns": {
+    "type": "object",
+    "properties": {
+      "success": {
+        "type": "boolean",
+        "description": "Whether the operation was successful"
+      },
+      "result": {
+        "description": "The result of the operation"
+      },
+      "error": {
+        "type": "string",
+        "description": "Error message if operation failed"
+      }
+    }
+  },
+  "security": {
+    "sandboxed": true,
+    "no_file_access": true,
+    "no_network_access": true,
+    "memory_limit": "128MB",
+    "timeout": 30
+  },
+  "metadata": {
+    "author": "Your Name",
+    "created": "2025-07-09T14:06:12.676Z",
+    "updated": "2025-07-09T14:06:12.676Z"
+  }
+}

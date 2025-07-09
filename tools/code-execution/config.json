@@ -1,0 +1,72 @@
+{
+  "id": "code-execution",
+  "name": "Code Execution",
+  "description": "Securely execute Python code for mathematical computations, data analysis, and problem solving. Code runs in a sandboxed environment with no file system access.",
+  "version": "1.0.0",
+  "enabled": true,
+  "allowedModels": ["openai/gpt-4o", "openai/gpt-4o-mini", "openai/gpt-4-turbo"],
+  "maxExecutionTime": 15000,
+  "requiresAuth": false,
+  "rateLimit": {
+    "requests": 20,
+    "window": "5m"
+  },
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "code": {
+        "type": "string",
+        "description": "Python code to execute. Must be valid Python 3 code.",
+        "minLength": 1,
+        "maxLength": 10000
+      },
+      "context_data": {
+        "type": "object",
+        "description": "Optional data context to make available to the code execution environment",
+        "properties": {
+          "variables": {
+            "type": "object",
+            "description": "Variables to inject into the execution environment"
+          },
+          "data": {
+            "type": "array",
+            "description": "Array of data items to process"
+          }
+        }
+      }
+    },
+    "required": ["code"],
+    "additionalProperties": false
+  },
+  "returns": {
+    "type": "object",
+    "properties": {
+      "success": {
+        "type": "boolean",
+        "description": "Whether the code executed successfully"
+      },
+      "output": {
+        "type": "string",
+        "description": "Standard output from the code execution"
+      },
+      "error": {
+        "type": "string",
+        "description": "Error message if execution failed"
+      },
+      "execution_time": {
+        "type": "number",
+        "description": "Time taken to execute the code in milliseconds"
+      },
+      "result": {
+        "description": "The final result/return value of the code execution"
+      }
+    }
+  },
+  "security": {
+    "sandboxed": true,
+    "no_file_access": true,
+    "no_network_access": true,
+    "memory_limit": "128MB",
+    "timeout": 15
+  }
+}
