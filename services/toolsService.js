@@ -476,8 +476,31 @@ class ToolsService {
                 
                 if (code === 0) {
                     try {
-                        const result = JSON.parse(stdout);
-                        resolve(result);
+                        // Filter out PROGRESS and STATUS lines to get the final JSON result
+                        const lines = stdout.split('\n');
+                        let jsonResult = null;
+                        
+                        // Look for the last valid JSON line (working backwards)
+                        for (let i = lines.length - 1; i >= 0; i--) {
+                            const line = lines[i].trim();
+                            if (line && !line.startsWith('PROGRESS:') && !line.startsWith('STATUS:')) {
+                                try {
+                                    jsonResult = JSON.parse(line);
+                                    break;
+                                } catch (e) {
+                                    // Continue looking for valid JSON
+                                    continue;
+                                }
+                            }
+                        }
+                        
+                        if (jsonResult) {
+                            resolve(jsonResult);
+                        } else {
+                            // Fallback: try to parse entire stdout as JSON
+                            const result = JSON.parse(stdout);
+                            resolve(result);
+                        }
                     } catch (error) {
                         reject(new Error(`Invalid JSON output: ${stdout}`));
                     }

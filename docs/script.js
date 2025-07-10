@@ -161,7 +161,10 @@ async function sendChatRequest() {
             }
             
             // Display response
-            displayResponse('chat-response', content, true);
+            const responseElement = document.getElementById('chat-response');
+            responseElement.innerHTML = `
+                <div class="response-content">${content}</div>
+            `;
             
             // Display links if present
             if (links.length > 0) {
@@ -191,10 +194,21 @@ async function handleStreamingRequest(requestBody) {
     const decoder = new TextDecoder();
     
     const responseElement = document.getElementById('chat-response');
-    responseElement.innerHTML = '<div class="streaming-container" id="stream-content"></div>';
+    responseElement.innerHTML = `
+        <div class="tools-section" id="tools-section" style="display: none;">
+            <div class="tools-header" onclick="toggleToolsView()">
+                <span class="tools-indicator">🔧</span>
+                <span class="tools-title">Tools Activity</span>
+                <span class="tools-toggle">▼</span>
+            </div>
+            <div class="tools-content" id="tools-content" style="display: none;"></div>
+        </div>
+        <div class="streaming-container" id="stream-content"></div>
+    `;
     
     const streamContent = document.getElementById('stream-content');
     let fullContent = '';
+    let toolsActive = false;
     
     try {
         while (true) {
@@ -221,6 +235,15 @@ async function handleStreamingRequest(requestBody) {
                     
                     try {
                         const parsed = JSON.parse(data);
+                        
+                        // Handle tool events
+                        if (parsed.type && parsed.type.startsWith('tool_')) {
+                            handleToolEvent(parsed);
+                            toolsActive = true;
+                            document.getElementById('tools-section').style.display = 'block';
+                            continue;
+                        }
+                        
                         if (parsed.choices?.[0]?.delta?.content) {
                             const deltaContent = parsed.choices[0].delta.content;
                             fullContent += deltaContent;
@@ -258,6 +281,72 @@ function displayLinks(responseElementId, links) {
     });
     
     responseElement.appendChild(linksDiv);
+}
+
+// Tool event handling
+function handleToolEvent(event) {
+    const toolsContent = document.getElementById('tools-content');
+    if (!toolsContent) return;
+    
+    const toolId = event.tool_id || 'unknown';
+    const toolName = event.tool_name || 'Unknown Tool';
+    
+    let toolElement = document.getElementById(`tool-${toolId}`);
+    
+    if (!toolElement) {
+        toolElement = document.createElement('div');
+        toolElement.id = `tool-${toolId}`;
+        toolElement.className = 'tool-item';
+        toolElement.innerHTML = `
+            <div class="tool-header">
+                <span class="tool-name">${toolName}</span>
+                <span class="tool-status" id="status-${toolId}">pending</span>
+            </div>
+            <div class="tool-details" id="details-${toolId}"></div>
+        `;
+        toolsContent.appendChild(toolElement);
+    }
+    
+    const statusElement = document.getElementById(`status-${toolId}`);
+    const detailsElement = document.getElementById(`details-${toolId}`);
+    
+    switch (event.type) {
+        case 'tool_call_start':
+            statusElement.textContent = 'starting';
+            statusElement.className = 'tool-status status-pending';
+            break;
+        case 'tool_call_executing':
+            statusElement.textContent = 'executing';
+            statusElement.className = 'tool-status status-executing';
+            break;
+        case 'tool_call_completed':
+            statusElement.textContent = 'completed';
+            statusElement.className = 'tool-status status-completed';
+            if (event.result) {
+                detailsElement.innerHTML = `<pre class="tool-result">${JSON.stringify(event.result, null, 2)}</pre>`;
+            }
+            break;
+        case 'tool_call_error':
+            statusElement.textContent = 'error';
+            statusElement.className = 'tool-status status-error';
+            if (event.error) {
+                detailsElement.innerHTML = `<div class="tool-error">${event.error}</div>`;
+            }
+            break;
+    }
+}
+
+function toggleToolsView() {
+    const toolsContent = document.getElementById('tools-content');
+    const toggle = document.querySelector('.tools-toggle');
+    
+    if (toolsContent.style.display === 'none') {
+        toolsContent.style.display = 'block';
+        toggle.textContent = '▲';
+    } else {
+        toolsContent.style.display = 'none';
+        toggle.textContent = '▼';
+    }
 }
 
 function clearChatResponse() {

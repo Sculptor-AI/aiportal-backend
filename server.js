@@ -98,6 +98,10 @@ app.use('/api/rss', rssRoutes);
 // Serve admin portal static files
 app.use('/admin/portal', express.static(path.join(process.cwd(), 'admin/portal')));
 
+// Serve docs static files
+app.use('/docs', express.static(path.join(process.cwd(), 'docs')));
+app.use('/', express.static(path.join(process.cwd(), 'docs')));
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'Server is running' });

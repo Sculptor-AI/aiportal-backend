@@ -118,6 +118,128 @@ class ToolCallManager {
 }
 
 /**
+ * Handle tool calls and continue conversation
+ * @param {Array} toolCalls - Array of tool calls
+ * @param {Object} originalPayload - Original request payload
+ * @param {string} modelType - Model type
+ * @param {Object} res - Response object
+ */
+async function handleToolCallsAndContinue(toolCalls, originalPayload, modelType, res) {
+  try {
+    // Execute all tool calls
+    const toolResults = [];
+    
+    for (const toolCall of toolCalls) {
+      if (toolCall.function && toolCall.function.name) {
+        // Send tool call start event
+        res.write(`data: ${JSON.stringify({
+          type: 'tool_call_start',
+          tool_id: toolCall.id,
+          tool_name: toolCall.function.name,
+          status: 'executing',
+          timestamp: new Date().toISOString()
+        })}\n\n`);
+        
+        try {
+          const parameters = JSON.parse(toolCall.function.arguments || '{}');
+          const result = await toolsService.executeTool(
+            toolCall.function.name,
+            parameters,
+            modelType
+          );
+          
+          // Send tool call completion event
+          res.write(`data: ${JSON.stringify({
+            type: 'tool_call_completed',
+            tool_id: toolCall.id,
+            tool_name: toolCall.function.name,
+            status: 'completed',
+            result: result,
+            timestamp: new Date().toISOString()
+          })}\n\n`);
+          
+          toolResults.push({
+            tool_call_id: toolCall.id,
+            role: 'tool',
+            content: JSON.stringify(result)
+          });
+        } catch (error) {
+          console.error(`Error executing tool ${toolCall.function.name}:`, error);
+          
+          // Send tool call error event
+          res.write(`data: ${JSON.stringify({
+            type: 'tool_call_error',
+            tool_id: toolCall.id,
+            tool_name: toolCall.function.name,
+            status: 'error',
+            error: error.message,
+            timestamp: new Date().toISOString()
+          })}\n\n`);
+          
+          toolResults.push({
+            tool_call_id: toolCall.id,
+            role: 'tool',
+            content: JSON.stringify({ error: error.message })
+          });
+        }
+      }
+    }
+    
+    // Make follow-up request with tool results
+    if (toolResults.length > 0) {
+      const followUpPayload = {
+        ...originalPayload,
+        messages: [
+          ...originalPayload.messages,
+          {
+            role: 'assistant',
+            content: null,
+            tool_calls: toolCalls
+          },
+          ...toolResults
+        ]
+      };
+      
+      // Make follow-up streaming request
+      const followUpResponse = await axios.post('https://openrouter.ai/api/v1/chat/completions', 
+        followUpPayload, 
+        {
+          headers: {
+            'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://aiportal.com',
+            'X-Title': 'AI Portal'
+          },
+          responseType: 'stream'
+        }
+      );
+      
+      // Stream the follow-up response
+      followUpResponse.data.on('data', (chunk) => {
+        res.write(chunk);
+      });
+      
+      followUpResponse.data.on('end', () => {
+        res.end();
+      });
+    } else {
+      res.write('data: [DONE]\n\n');
+      res.end();
+    }
+    
+  } catch (error) {
+    console.error('Error handling tool calls and continuation:', error);
+    res.write(`data: ${JSON.stringify({
+      type: 'tool_system_error',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    })}\n\n`);
+    res.write('data: [DONE]\n\n');
+    res.end();
+  }
+}
+
+/**
  * Handle tool calls in streaming response with enhanced multi-call support
  * @param {string} chunk - Response chunk
  * @param {string} modelType - Model type
@@ -918,9 +1040,63 @@ export const streamChat = async (req, res) => {
     // Create tool call manager for this session
     const toolManager = new ToolCallManager();
     
+    // Track tool calls and conversation state
+    let toolCalls = [];
+    let isCollectingToolCalls = false;
+    let fullResponse = '';
+    
     // Pipe the OpenRouter response directly to the client
     response.data.on('data', async (chunk) => {
       const data = chunk.toString();
+      
+      // Parse the chunk to check for tool calls
+      const lines = data.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('data: ') && !line.includes('[DONE]')) {
+          try {
+            const parsed = JSON.parse(line.slice(6));
+            const choice = parsed.choices?.[0];
+            
+            // Check for tool calls
+            if (choice?.delta?.tool_calls) {
+              isCollectingToolCalls = true;
+              const deltaToolCalls = choice.delta.tool_calls;
+              
+              // Merge tool calls
+              for (const deltaToolCall of deltaToolCalls) {
+                if (deltaToolCall.index !== undefined) {
+                  if (!toolCalls[deltaToolCall.index]) {
+                    toolCalls[deltaToolCall.index] = {
+                      id: deltaToolCall.id,
+                      type: deltaToolCall.type,
+                      function: {
+                        name: deltaToolCall.function?.name || '',
+                        arguments: deltaToolCall.function?.arguments || ''
+                      }
+                    };
+                  } else {
+                    if (deltaToolCall.function?.name) {
+                      toolCalls[deltaToolCall.index].function.name += deltaToolCall.function.name;
+                    }
+                    if (deltaToolCall.function?.arguments) {
+                      toolCalls[deltaToolCall.index].function.arguments += deltaToolCall.function.arguments;
+                    }
+                  }
+                }
+              }
+            }
+            
+            // Check for finish reason
+            if (choice?.finish_reason === 'tool_calls') {
+              // Handle tool calls and continue conversation
+              await handleToolCallsAndContinue(toolCalls, openRouterPayload, adjustedModelType, res);
+              return;
+            }
+          } catch (e) {
+            // Not JSON, continue
+          }
+        }
+      }
       
       // Check for tool calls and handle them with enhanced manager
       const toolHandled = await handleToolCall(data, adjustedModelType, (toolData) => {
