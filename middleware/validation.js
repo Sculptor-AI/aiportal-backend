@@ -7,7 +7,7 @@ import { decryptPacket } from '../utils/encryption.js';
  * @param {Function} next - Express next middleware function
  */
 export const validateChatRequest = (req, res, next) => {
-  const { modelType, prompt } = req.body;
+  const { modelType, prompt, imageData } = req.body;
   
   if (!modelType) {
     return res.status(400).json({ error: 'Missing required field: modelType' });
@@ -15,6 +15,15 @@ export const validateChatRequest = (req, res, next) => {
   
   if (!prompt) {
     return res.status(400).json({ error: 'Missing required field: prompt' });
+  }
+
+  // Fix prompt structure when imageData is present
+  if (imageData && typeof req.body.prompt !== 'string') {
+    if (req.body.prompt && typeof req.body.prompt === 'object' && req.body.prompt.text) {
+      req.body.prompt = req.body.prompt.text;
+    } else {
+      req.body.prompt = String(req.body.prompt);
+    }
   }
   
   // If request is encrypted, decrypt it first

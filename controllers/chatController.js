@@ -184,7 +184,18 @@ async function handleToolCall(chunk, modelType, writeStream, toolManager = null)
  */
 export const completeChat = async (req, res) => {
   try {
-    const { modelType, prompt, search = false, deepResearch = false, imageGen = false, imageData = null, mode, systemPrompt, messages = [] } = req.body;
+    let { modelType, prompt, search = false, deepResearch = false, imageGen = false, imageData = null, mode, systemPrompt, messages = [] } = req.body;
+    
+    // Fix prompt structure when imageData is present
+    if (imageData && typeof prompt !== 'string') {
+      if (prompt && typeof prompt === 'object' && prompt.text) {
+        prompt = prompt.text;
+        req.body.prompt = prompt;
+      } else {
+        prompt = String(prompt);
+        req.body.prompt = prompt;
+      }
+    }
     
     // Log the request (without sensitive data)
     console.log(`Request received for model: ${modelType}, mode: ${mode}, search: ${search}, hasImage: ${!!imageData}`);
@@ -473,7 +484,7 @@ export const completeChat = async (req, res) => {
  * @param {Object} res - Express response object
  */
 export const streamChat = async (req, res) => {
-  const { modelType, prompt, search, deepResearch, imageGen, imageData, fileTextContent, mode, systemPrompt, messages = [] } = req.body;
+  let { modelType, prompt, search, deepResearch, imageGen, imageData, fileTextContent, mode, systemPrompt, messages = [] } = req.body;
   
   if (!modelType || !prompt) {
     return res.status(400).json({ error: 'Missing required fields: modelType and prompt' });
@@ -487,6 +498,33 @@ export const streamChat = async (req, res) => {
     hasFileText: !!fileTextContent,
     fileTextLength: fileTextContent?.length
   });
+
+  // Debug logging for image attachment bug
+  if (imageData) {
+    console.log("DEBUG: Image attachment detected");
+    console.log("DEBUG: prompt type:", typeof prompt);
+    console.log("DEBUG: prompt value:", prompt);
+    console.log("DEBUG: imageData structure:", {
+      hasData: !!imageData.data,
+      hasMediaType: !!imageData.mediaType,
+      mediaType: imageData.mediaType,
+      dataLength: imageData.data?.length
+    });
+
+    // Fix: Ensure prompt is always a string when imageData is present
+    if (typeof prompt !== 'string') {
+      console.log("DEBUG: Converting non-string prompt to string");
+      if (prompt && typeof prompt === 'object' && prompt.text) {
+        prompt = prompt.text;
+        req.body.prompt = prompt;
+        console.log("DEBUG: Extracted text from prompt object:", prompt);
+      } else {
+        prompt = String(prompt);
+        req.body.prompt = prompt;
+        console.log("DEBUG: Converted prompt to string:", prompt);
+      }
+    }
+  }
   
   // Set appropriate headers for SSE
   res.setHeader('Content-Type', 'text/event-stream');
