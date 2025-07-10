@@ -263,6 +263,114 @@ export class LocalInferenceService {
 
       const data = await response.json();
 
+      // Check for tool calls and execute them with logging (when local models support it)
+      if (data.choices?.[0]?.message?.tool_calls && data.choices[0].message.tool_calls.length > 0) {
+        const toolCalls = data.choices[0].message.tool_calls;
+        
+        // Log summary of tool calls detected
+        console.log(`\n🎯 DETECTED ${toolCalls.length} TOOL CALL${toolCalls.length > 1 ? 'S' : ''}:`);
+        toolCalls.forEach((tc, i) => {
+          console.log(`  ${i + 1}. ${tc.function?.name || 'Unknown'}`);
+        });
+        console.log('═════════════════════════════════════════');
+        
+        const toolResults = [];
+        
+        for (const toolCall of toolCalls) {
+          if (toolCall.function && toolCall.function.name) {
+            try {
+              // Log tool execution details to console
+              console.log(`\n🔧 TOOL CALL: ${toolCall.function.name}`);
+              const parameters = JSON.parse(toolCall.function.arguments || '{}');
+              console.log(`📝 Parameters:`, JSON.stringify(parameters, null, 2));
+              
+              const toolsService = await import('./toolsService.js');
+              const result = await toolsService.default.executeTool(
+                toolCall.function.name, 
+                parameters, 
+                modelType
+              );
+              
+              console.log(`✅ Result:`, typeof result === 'object' ? JSON.stringify(result, null, 2) : result);
+              console.log(`─────────────────────────────────────────\n`);
+              
+              toolResults.push({
+                tool_call_id: toolCall.id,
+                role: 'tool',
+                content: JSON.stringify(result)
+              });
+            } catch (error) {
+              const parameters = JSON.parse(toolCall.function.arguments || '{}');
+              console.log(`❌ TOOL ERROR: ${toolCall.function.name}`);
+              console.log(`📝 Parameters:`, JSON.stringify(parameters, null, 2));
+              console.log(`💥 Error:`, error.message);
+              console.log(`─────────────────────────────────────────\n`);
+              
+              console.error(`Error executing tool ${toolCall.function.name}:`, error);
+              toolResults.push({
+                tool_call_id: toolCall.id,
+                role: 'tool',
+                content: JSON.stringify({ error: error.message })
+              });
+            }
+          }
+        }
+        
+        // If we have tool results, make another API call with the results
+        if (toolResults.length > 0) {
+          const messagesWithResults = [
+            ...llamaMessages,
+            {
+              role: 'assistant',
+              content: null,
+              tool_calls: toolCalls
+            },
+            ...toolResults
+          ];
+          
+          const followUpPayload = {
+            ...payload,
+            messages: messagesWithResults,
+            tools: undefined // Remove tools from follow-up to prevent loops
+          };
+          
+          const followUpResponse = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(followUpPayload)
+          });
+          
+          if (!followUpResponse.ok) {
+            throw new Error(`Local model server error on follow-up: ${followUpResponse.status} ${followUpResponse.statusText}`);
+          }
+          
+          const followUpData = await followUpResponse.json();
+          
+          // Return the follow-up response
+          return {
+            id: `local-follow-${Date.now()}`,
+            object: 'chat.completion',
+            created: Math.floor(Date.now() / 1000),
+            model: modelType,
+            choices: [{
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: followUpData.choices?.[0]?.message?.content || ''
+              },
+              finish_reason: followUpData.choices?.[0]?.finish_reason || 'stop'
+            }],
+            usage: {
+              prompt_tokens: (data.usage?.prompt_tokens || 0) + (followUpData.usage?.prompt_tokens || 0),
+              completion_tokens: (data.usage?.completion_tokens || 0) + (followUpData.usage?.completion_tokens || 0),
+              total_tokens: (data.usage?.total_tokens || 0) + (followUpData.usage?.total_tokens || 0)
+            }
+          };
+        }
+      }
+
       // Transform response to match OpenAI format
       return {
         id: `local-${Date.now()}`,

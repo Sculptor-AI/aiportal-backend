@@ -120,6 +120,118 @@ export class OllamaService {
         });
       }
 
+      // Check for tool calls and execute them with logging (when Ollama supports it)
+      if (response.data.message?.tool_calls && response.data.message.tool_calls.length > 0) {
+        const toolCalls = response.data.message.tool_calls;
+        
+        // Log summary of tool calls detected
+        console.log(`\n🎯 DETECTED ${toolCalls.length} TOOL CALL${toolCalls.length > 1 ? 'S' : ''}:`);
+        toolCalls.forEach((tc, i) => {
+          console.log(`  ${i + 1}. ${tc.function?.name || 'Unknown'}`);
+        });
+        console.log('═════════════════════════════════════════');
+        
+        const toolResults = [];
+        
+        for (const toolCall of toolCalls) {
+          if (toolCall.function && toolCall.function.name) {
+            try {
+              // Log tool execution details to console
+              console.log(`\n🔧 TOOL CALL: ${toolCall.function.name}`);
+              const parameters = JSON.parse(toolCall.function.arguments || '{}');
+              console.log(`📝 Parameters:`, JSON.stringify(parameters, null, 2));
+              
+              const toolsService = await import('./toolsService.js');
+              const result = await toolsService.default.executeTool(
+                toolCall.function.name, 
+                parameters, 
+                modelType
+              );
+              
+              console.log(`✅ Result:`, typeof result === 'object' ? JSON.stringify(result, null, 2) : result);
+              console.log(`─────────────────────────────────────────\n`);
+              
+              toolResults.push({
+                tool_call_id: toolCall.id,
+                role: 'tool',
+                content: JSON.stringify(result)
+              });
+            } catch (error) {
+              const parameters = JSON.parse(toolCall.function.arguments || '{}');
+              console.log(`❌ TOOL ERROR: ${toolCall.function.name}`);
+              console.log(`📝 Parameters:`, JSON.stringify(parameters, null, 2));
+              console.log(`💥 Error:`, error.message);
+              console.log(`─────────────────────────────────────────\n`);
+              
+              console.error(`Error executing tool ${toolCall.function.name}:`, error);
+              toolResults.push({
+                tool_call_id: toolCall.id,
+                role: 'tool',
+                content: JSON.stringify({ error: error.message })
+              });
+            }
+          }
+        }
+        
+        // If we have tool results, make another API call with the results
+        if (toolResults.length > 0) {
+          const messagesWithResults = [
+            ...ollamaMessages,
+            {
+              role: 'assistant',
+              content: null,
+              tool_calls: toolCalls
+            },
+            ...toolResults
+          ];
+          
+          const followUpPayload = {
+            ...payload,
+            messages: messagesWithResults,
+            tools: undefined // Remove tools from follow-up to prevent loops
+          };
+          
+          let followUpResponse;
+          try {
+            followUpResponse = await axios.post(`${this.baseURL}/api/chat`, followUpPayload, {
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              timeout: 300000
+            });
+          } catch (httpsError) {
+            console.warn('⚠️  HTTPS connection to Ollama failed, falling back to HTTP');
+            followUpResponse = await axios.post(`${this.fallbackURL}/api/chat`, followUpPayload, {
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              timeout: 300000
+            });
+          }
+          
+          // Return the follow-up response
+          return {
+            id: `ollama-follow-${Date.now()}`,
+            object: 'chat.completion',
+            created: Math.floor(Date.now() / 1000),
+            model: modelType,
+            choices: [{
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: followUpResponse.data.message?.content || ''
+              },
+              finish_reason: followUpResponse.data.done ? 'stop' : null
+            }],
+            usage: {
+              prompt_tokens: (response.data.prompt_eval_count || 0) + (followUpResponse.data.prompt_eval_count || 0),
+              completion_tokens: (response.data.eval_count || 0) + (followUpResponse.data.eval_count || 0),
+              total_tokens: (response.data.prompt_eval_count || 0) + (response.data.eval_count || 0) + (followUpResponse.data.prompt_eval_count || 0) + (followUpResponse.data.eval_count || 0)
+            }
+          };
+        }
+      }
+
       // Transform Ollama response to match OpenAI format
       return {
         id: `ollama-${Date.now()}`,

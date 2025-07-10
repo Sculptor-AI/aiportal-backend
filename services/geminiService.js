@@ -117,6 +117,85 @@ export const processGeminiChat = async (modelType, prompt, imageData = null, sys
       // Send message with parts
       const result = await chat.sendMessage(parts);
       const response = await result.response;
+      
+      // Check for function calls in response and execute them with logging
+      const functionCalls = response.candidates?.[0]?.content?.parts?.filter(part => part.functionCall) || [];
+      if (functionCalls.length > 0) {
+        // Log summary of tool calls detected
+        console.log(`\n🎯 DETECTED ${functionCalls.length} TOOL CALL${functionCalls.length > 1 ? 'S' : ''}:`);
+        functionCalls.forEach((fc, i) => {
+          console.log(`  ${i + 1}. ${fc.functionCall?.name || 'Unknown'}`);
+        });
+        console.log('═════════════════════════════════════════');
+        
+        // Execute function calls
+        const functionResults = [];
+        for (const functionCall of functionCalls) {
+          try {
+            // Log tool execution details to console
+            console.log(`\n🔧 TOOL CALL: ${functionCall.functionCall.name}`);
+            console.log(`📝 Parameters:`, JSON.stringify(functionCall.functionCall.args || {}, null, 2));
+            
+            const toolsService = await import('./toolsService.js');
+            const result = await toolsService.default.executeTool(
+              functionCall.functionCall.name,
+              functionCall.functionCall.args || {},
+              modelType
+            );
+            
+            console.log(`✅ Result:`, typeof result === 'object' ? JSON.stringify(result, null, 2) : result);
+            console.log(`─────────────────────────────────────────\n`);
+            
+            functionResults.push({
+              functionResponse: {
+                name: functionCall.functionCall.name,
+                response: result
+              }
+            });
+          } catch (error) {
+            console.log(`❌ TOOL ERROR: ${functionCall.functionCall.name}`);
+            console.log(`📝 Parameters:`, JSON.stringify(functionCall.functionCall.args || {}, null, 2));
+            console.log(`💥 Error:`, error.message);
+            console.log(`─────────────────────────────────────────\n`);
+            
+            console.error(`Error executing tool ${functionCall.functionCall.name}:`, error);
+            functionResults.push({
+              functionResponse: {
+                name: functionCall.functionCall.name,
+                response: { error: error.message }
+              }
+            });
+          }
+        }
+        
+        // If we have function results, make another API call with the results
+        if (functionResults.length > 0) {
+          const followUpResult = await chat.sendMessage(functionResults);
+          const followUpResponse = await followUpResult.response;
+          
+          // Return the follow-up response
+          return {
+            id: `gemini-follow-${Date.now()}`,
+            object: 'chat.completion',
+            created: Math.floor(Date.now() / 1000),
+            model: modelType,
+            choices: [{
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: followUpResponse.text()
+              },
+              finish_reason: 'stop'
+            }],
+            usage: {
+              prompt_tokens: 0,
+              completion_tokens: 0,
+              total_tokens: 0
+            }
+          };
+        }
+      }
+      
       const text = response.text();
       
       // Format response to match OpenRouter format for consistency

@@ -593,6 +593,13 @@ export const streamOpenAICompatibleChat = async (modelType, prompt, imageData = 
       if (chunk.choices?.[0]?.finish_reason === 'tool_calls' || (chunk.choices?.[0]?.finish_reason && isCollectingToolCalls)) {
         // If we have tool calls, execute them
         if (!disableInternalToolHandling && isCollectingToolCalls && toolCalls.length > 0) {
+          // Log summary of tool calls detected
+          console.log(`\n🎯 DETECTED ${toolCalls.length} TOOL CALL${toolCalls.length > 1 ? 'S' : ''}:`);
+          toolCalls.forEach((tc, i) => {
+            console.log(`  ${i + 1}. ${tc.function?.name || 'Unknown'}`);
+          });
+          console.log('═════════════════════════════════════════');
+          
           // Execute tool calls
           const toolResults = [];
           
@@ -601,17 +608,31 @@ export const streamOpenAICompatibleChat = async (modelType, prompt, imageData = 
               try {
                 const toolsService = await import('./toolsService.js');
                 const parameters = JSON.parse(toolCall.function.arguments || '{}');
+                
+                // Log tool execution details to console
+                console.log(`\n🔧 TOOL CALL: ${toolCall.function.name}`);
+                console.log(`📝 Parameters:`, JSON.stringify(parameters, null, 2));
+                
                 const result = await toolsService.default.executeTool(
                   toolCall.function.name, 
                   parameters, 
                   modelType
                 );
+                
+                console.log(`✅ Result:`, typeof result === 'object' ? JSON.stringify(result, null, 2) : result);
+                console.log(`─────────────────────────────────────────\n`);
                 toolResults.push({
                   tool_call_id: toolCall.id,
                   role: 'tool',
                   content: JSON.stringify(result)
                 });
               } catch (error) {
+                const parameters = JSON.parse(toolCall.function.arguments || '{}');
+                console.log(`❌ TOOL ERROR: ${toolCall.function.name}`);
+                console.log(`📝 Parameters:`, JSON.stringify(parameters, null, 2));
+                console.log(`💥 Error:`, error.message);
+                console.log(`─────────────────────────────────────────\n`);
+                
                 console.error(`Error executing tool ${toolCall.function.name}:`, error);
                 toolResults.push({
                   tool_call_id: toolCall.id,
@@ -841,6 +862,13 @@ export const streamOpenAIChat = async (modelType, prompt, imageData = null, syst
       if (chunk.choices?.[0]?.finish_reason === 'tool_calls' || (chunk.choices?.[0]?.finish_reason && isCollectingToolCalls)) {
         // If we have tool calls, execute them
         if (!disableInternalToolHandling && isCollectingToolCalls && toolCalls.length > 0) {
+          // Log summary of tool calls detected
+          console.log(`\n🎯 DETECTED ${toolCalls.length} TOOL CALL${toolCalls.length > 1 ? 'S' : ''}:`);
+          toolCalls.forEach((tc, i) => {
+            console.log(`  ${i + 1}. ${tc.function?.name || 'Unknown'}`);
+          });
+          console.log('═════════════════════════════════════════');
+          
           // Execute tool calls
           const toolResults = [];
           
@@ -849,17 +877,31 @@ export const streamOpenAIChat = async (modelType, prompt, imageData = null, syst
               try {
                 const toolsService = await import('./toolsService.js');
                 const parameters = JSON.parse(toolCall.function.arguments || '{}');
+                
+                // Log tool execution details to console
+                console.log(`\n🔧 TOOL CALL: ${toolCall.function.name}`);
+                console.log(`📝 Parameters:`, JSON.stringify(parameters, null, 2));
+                
                 const result = await toolsService.default.executeTool(
                   toolCall.function.name, 
                   parameters, 
                   modelType
                 );
+                
+                console.log(`✅ Result:`, typeof result === 'object' ? JSON.stringify(result, null, 2) : result);
+                console.log(`─────────────────────────────────────────\n`);
                 toolResults.push({
                   tool_call_id: toolCall.id,
                   role: 'tool',
                   content: JSON.stringify(result)
                 });
               } catch (error) {
+                const parameters = JSON.parse(toolCall.function.arguments || '{}');
+                console.log(`❌ TOOL ERROR: ${toolCall.function.name}`);
+                console.log(`📝 Parameters:`, JSON.stringify(parameters, null, 2));
+                console.log(`💥 Error:`, error.message);
+                console.log(`─────────────────────────────────────────\n`);
+                
                 console.error(`Error executing tool ${toolCall.function.name}:`, error);
                 toolResults.push({
                   tool_call_id: toolCall.id,

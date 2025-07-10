@@ -142,11 +142,19 @@ async function handleToolCallsAndContinue(toolCalls, originalPayload, modelType,
         
         try {
           const parameters = JSON.parse(toolCall.function.arguments || '{}');
+          
+          // Log tool execution details to console
+          console.log(`\n🔧 TOOL CALL: ${toolCall.function.name}`);
+          console.log(`📝 Parameters:`, JSON.stringify(parameters, null, 2));
+          
           const result = await toolsService.executeTool(
             toolCall.function.name,
             parameters,
             modelType
           );
+          
+          console.log(`✅ Result:`, typeof result === 'object' ? JSON.stringify(result, null, 2) : result);
+          console.log(`─────────────────────────────────────────\n`);
           
           // Send tool call completion event
           res.write(`data: ${JSON.stringify({
@@ -164,6 +172,11 @@ async function handleToolCallsAndContinue(toolCalls, originalPayload, modelType,
             content: JSON.stringify(result)
           });
         } catch (error) {
+          console.log(`❌ TOOL ERROR: ${toolCall.function.name}`);
+          console.log(`📝 Parameters:`, JSON.stringify(JSON.parse(toolCall.function.arguments || '{}'), null, 2));
+          console.log(`💥 Error:`, error.message);
+          console.log(`─────────────────────────────────────────\n`);
+          
           console.error(`Error executing tool ${toolCall.function.name}:`, error);
           
           // Send tool call error event
@@ -1088,6 +1101,13 @@ export const streamChat = async (req, res) => {
             
             // Check for finish reason
             if (choice?.finish_reason === 'tool_calls') {
+              // Log summary of tool calls detected
+              console.log(`\n🎯 DETECTED ${toolCalls.length} TOOL CALL${toolCalls.length > 1 ? 'S' : ''}:`);
+              toolCalls.forEach((tc, i) => {
+                console.log(`  ${i + 1}. ${tc.function?.name || 'Unknown'}`);
+              });
+              console.log('═════════════════════════════════════════');
+              
               // Handle tool calls and continue conversation
               await handleToolCallsAndContinue(toolCalls, openRouterPayload, adjustedModelType, res);
               return;

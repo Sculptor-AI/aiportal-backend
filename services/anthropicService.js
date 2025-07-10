@@ -113,20 +113,40 @@ export const processAnthropicChat = async (modelType, prompt, imageData = null, 
       const toolUseBlocks = completion.content.filter(block => block.type === 'tool_use');
       const toolResults = [];
       
+      // Log summary of tool calls detected
+      console.log(`\n🎯 DETECTED ${toolUseBlocks.length} TOOL CALL${toolUseBlocks.length > 1 ? 'S' : ''}:`);
+      toolUseBlocks.forEach((tu, i) => {
+        console.log(`  ${i + 1}. ${tu.name || 'Unknown'}`);
+      });
+      console.log('═════════════════════════════════════════');
+      
       for (const toolUse of toolUseBlocks) {
         try {
+          // Log tool execution details to console
+          console.log(`\n🔧 TOOL CALL: ${toolUse.name}`);
+          console.log(`📝 Parameters:`, JSON.stringify(toolUse.input || {}, null, 2));
+          
           const toolsService = await import('./toolsService.js');
           const result = await toolsService.default.executeTool(
             toolUse.name, 
             toolUse.input || {}, 
             modelType
           );
+          
+          console.log(`✅ Result:`, typeof result === 'object' ? JSON.stringify(result, null, 2) : result);
+          console.log(`─────────────────────────────────────────\n`);
+          
           toolResults.push({
             type: 'tool_result',
             tool_use_id: toolUse.id,
             content: JSON.stringify(result)
           });
         } catch (error) {
+          console.log(`❌ TOOL ERROR: ${toolUse.name}`);
+          console.log(`📝 Parameters:`, JSON.stringify(toolUse.input || {}, null, 2));
+          console.log(`💥 Error:`, error.message);
+          console.log(`─────────────────────────────────────────\n`);
+          
           console.error(`Error executing tool ${toolUse.name}:`, error);
           toolResults.push({
             type: 'tool_result',
@@ -319,22 +339,42 @@ export const streamAnthropicChat = async (modelType, prompt, imageData = null, s
       } else if (event.type === 'message_stop') {
         // Message is complete - execute any tools
         if (toolUses.length > 0) {
+          // Log summary of tool calls detected
+          console.log(`\n🎯 DETECTED ${toolUses.length} TOOL CALL${toolUses.length > 1 ? 'S' : ''}:`);
+          toolUses.forEach((tu, i) => {
+            console.log(`  ${i + 1}. ${tu.name || 'Unknown'}`);
+          });
+          console.log('═════════════════════════════════════════');
+          
           const toolResults = [];
           
           for (const toolUse of toolUses) {
             try {
+              // Log tool execution details to console
+              console.log(`\n🔧 TOOL CALL: ${toolUse.name}`);
+              console.log(`📝 Parameters:`, JSON.stringify(toolUse.input || {}, null, 2));
+              
               const toolsService = await import('./toolsService.js');
               const result = await toolsService.default.executeTool(
                 toolUse.name, 
                 toolUse.input || {}, 
                 modelType
               );
+              
+              console.log(`✅ Result:`, typeof result === 'object' ? JSON.stringify(result, null, 2) : result);
+              console.log(`─────────────────────────────────────────\n`);
+              
               toolResults.push({
                 type: 'tool_result',
                 tool_use_id: toolUse.id,
                 content: JSON.stringify(result)
               });
             } catch (error) {
+              console.log(`❌ TOOL ERROR: ${toolUse.name}`);
+              console.log(`📝 Parameters:`, JSON.stringify(toolUse.input || {}, null, 2));
+              console.log(`💥 Error:`, error.message);
+              console.log(`─────────────────────────────────────────\n`);
+              
               console.error(`Error executing tool ${toolUse.name}:`, error);
               toolResults.push({
                 type: 'tool_result',
