@@ -182,6 +182,134 @@ X-API-Key: ak_1234567890abcdef...
 
 ## 📋 API Endpoints
 
+### Serverless Code Execution (Frontend Integration)
+
+These endpoints allow frontend applications to execute AI-generated code blocks without authentication.
+
+#### Get Supported Languages
+```http
+GET /api/v1/tools/languages
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "languages": [
+    {
+      "name": "python",
+      "id": 71,
+      "mainFile": "main.py"
+    },
+    {
+      "name": "javascript",
+      "id": 63,
+      "mainFile": "main.js"
+    }
+  ],
+  "count": 100
+}
+```
+
+#### Execute Code (Non-Streaming)
+```http
+POST /api/v1/tools/execute-code
+Content-Type: application/json
+
+{
+  "code": "print('Hello, World!')\nresult = 2 + 2\nprint(f'Result: {result}')",
+  "language": "python",
+  "variables": {
+    "radius": 5,
+    "pi": 3.14159
+  },
+  "execution_id": "optional-custom-id"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "execution_id": "serverless_1703123456789_abc123def",
+  "result": {
+    "success": true,
+    "output": "Hello, World!\nResult: 4\n",
+    "execution_time": 45.67,
+    "result": 4
+  },
+  "execution_time": 67.89,
+  "timestamp": "2023-12-21T10:30:45.123Z"
+}
+```
+
+#### Execute Code (Streaming)
+```http
+POST /api/v1/tools/execute-code/stream
+Content-Type: application/json
+
+{
+  "code": "import time\nfor i in range(3):\n    print(f'Step {i+1}')\n    time.sleep(0.5)\nresult = 'Complete'"
+}
+```
+
+**Stream Events:**
+```javascript
+// Connection established
+data: {"type": "connected", "execution_id": "...", "message": "Serverless code execution stream connected"}
+
+// Execution started
+data: {"type": "execution_started", "execution_id": "...", "toolId": "code-execution"}
+
+// Progress update
+data: {"type": "execution_progress_structured", "execution_id": "...", "step": "executing", "percentage": 50, "message": "Processing data"}
+
+// Execution completed
+data: {"type": "execution_completed", "execution_id": "...", "result": {...}, "execution_time": 67.89}
+```
+
+**Frontend Integration Example:**
+```javascript
+async function executeCode(code, language = null) {
+  const response = await fetch('https://api.sculptorai.org/api/v1/tools/execute-code', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, language })
+  });
+  
+  const result = await response.json();
+  if (result.success) {
+    console.log('Output:', result.result.output);
+    return result.result;
+  } else {
+    throw new Error(result.error);
+  }
+}
+
+// Usage examples
+executeCode('print("Hello, World!")', 'python');
+executeCode('console.log("Hello, World!");', 'javascript');
+```
+
+**Supported Languages:**
+- **Python** (3.8.1) - ID: 71
+- **JavaScript** (Node.js 12.14.0) - ID: 63
+- **Java** (OpenJDK 13.0.1) - ID: 62
+- **C++** (GCC 9.2.0) - ID: 54
+- **C#** (Mono 6.6.0.161) - ID: 51
+- **PHP** (7.4.1) - ID: 68
+- **Ruby** (2.7.0) - ID: 72
+- **Go** (1.13.5) - ID: 60
+- **Rust** (1.40.0) - ID: 73
+- **And 90+ more languages...**
+
+**Security Features:**
+- Sandboxed execution across 100+ programming languages
+- Resource limits (memory and execution time)
+- No file system or network access
+- Process isolation
+- Rate limited (20 requests per 5 minutes per IP)
+
 ### Authentication Endpoints
 
 #### Register User
