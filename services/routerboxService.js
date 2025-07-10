@@ -302,6 +302,9 @@ export class RouterboxService {
       webSearch = false,
       searchQuery = null
     } = params;
+    
+    // Use a mutable variable for imageData that we can reassign
+    let extractedImageData = imageData;
 
     // Handle web search if requested
     if (webSearch) {
@@ -319,10 +322,10 @@ export class RouterboxService {
         const prompt = this.extractTextFromContent(lastMessage?.content) || '';
         const conversationHistory = messages.slice(0, -1);
         // Extract imageData from message content if not already provided
-        if (!imageData && lastMessage?.content) {
-          imageData = this.extractImageFromContent(lastMessage.content);
+        if (!extractedImageData && lastMessage?.content) {
+          extractedImageData = this.extractImageFromContent(lastMessage.content);
         }
-        return await streamAnthropicChat(model, prompt, imageData, systemPrompt, writeCallback, conversationHistory);
+        return await streamAnthropicChat(model, prompt, extractedImageData, systemPrompt, writeCallback, conversationHistory);
         
       case 'openai':
         // Check if this is an OpenAI-compatible routing (custom endpoint)
@@ -332,19 +335,19 @@ export class RouterboxService {
           const promptOpenAI = this.extractTextFromContent(lastMessageOpenAI?.content) || '';
           const conversationHistoryOpenAI = messages.slice(0, -1);
           // Extract imageData from message content if not already provided
-          if (!imageData && lastMessageOpenAI?.content) {
-            imageData = this.extractImageFromContent(lastMessageOpenAI.content);
+          if (!extractedImageData && lastMessageOpenAI?.content) {
+            extractedImageData = this.extractImageFromContent(lastMessageOpenAI.content);
           }
-          return await streamOpenAICompatibleChat(model, promptOpenAI, imageData, systemPrompt, writeCallback, conversationHistoryOpenAI, modelConfig, false);
+          return await streamOpenAICompatibleChat(model, promptOpenAI, extractedImageData, systemPrompt, writeCallback, conversationHistoryOpenAI, modelConfig, false);
         } else {
           const lastMessageOpenAI = messages[messages.length - 1];
           const promptOpenAI = this.extractTextFromContent(lastMessageOpenAI?.content) || '';
           const conversationHistoryOpenAI = messages.slice(0, -1);
           // Extract imageData from message content if not already provided
-          if (!imageData && lastMessageOpenAI?.content) {
-            imageData = this.extractImageFromContent(lastMessageOpenAI.content);
+          if (!extractedImageData && lastMessageOpenAI?.content) {
+            extractedImageData = this.extractImageFromContent(lastMessageOpenAI.content);
           }
-          return await streamOpenAIChat(model, promptOpenAI, imageData, systemPrompt, writeCallback, conversationHistoryOpenAI, false);
+          return await streamOpenAIChat(model, promptOpenAI, extractedImageData, systemPrompt, writeCallback, conversationHistoryOpenAI, false);
         }
         
       case 'gemini':
@@ -352,20 +355,20 @@ export class RouterboxService {
         const promptGemini = this.extractTextFromContent(lastMessageGemini?.content) || '';
         const conversationHistoryGemini = messages.slice(0, -1);
         // Extract imageData from message content if not already provided
-        if (!imageData && lastMessageGemini?.content) {
-          imageData = this.extractImageFromContent(lastMessageGemini.content);
+        if (!extractedImageData && lastMessageGemini?.content) {
+          extractedImageData = this.extractImageFromContent(lastMessageGemini.content);
         }
-        return await streamGeminiChat(model, promptGemini, imageData, systemPrompt, writeCallback, conversationHistoryGemini);
+        return await streamGeminiChat(model, promptGemini, extractedImageData, systemPrompt, writeCallback, conversationHistoryGemini);
         
       case 'ollama':
         const lastMessageOllama = messages[messages.length - 1];
         const promptOllama = this.extractTextFromContent(lastMessageOllama?.content) || '';
         const conversationHistoryOllama = messages.slice(0, -1);
         // Extract imageData from message content if not already provided
-        if (!imageData && lastMessageOllama?.content) {
-          imageData = this.extractImageFromContent(lastMessageOllama.content);
+        if (!extractedImageData && lastMessageOllama?.content) {
+          extractedImageData = this.extractImageFromContent(lastMessageOllama.content);
         }
-        return await streamOllamaChat(model, promptOllama, imageData, systemPrompt, writeCallback, conversationHistoryOllama);
+        return await streamOllamaChat(model, promptOllama, extractedImageData, systemPrompt, writeCallback, conversationHistoryOllama);
         
       case 'local':
       case 'localInference':
@@ -373,10 +376,10 @@ export class RouterboxService {
         const promptLocal = this.extractTextFromContent(lastMessageLocal?.content) || '';
         const conversationHistoryLocal = messages.slice(0, -1);
         // Extract imageData from message content if not already provided
-        if (!imageData && lastMessageLocal?.content) {
-          imageData = this.extractImageFromContent(lastMessageLocal.content);
+        if (!extractedImageData && lastMessageLocal?.content) {
+          extractedImageData = this.extractImageFromContent(lastMessageLocal.content);
         }
-        return await streamLocalChat(model, promptLocal, imageData, systemPrompt, writeCallback, conversationHistoryLocal);
+        return await streamLocalChat(model, promptLocal, extractedImageData, systemPrompt, writeCallback, conversationHistoryLocal);
         
       case 'openrouter':
       default:
