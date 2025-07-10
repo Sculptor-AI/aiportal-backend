@@ -88,6 +88,7 @@ export class RouterboxService {
     if (isGeminiModel(modelId)) return 'gemini';
     if (isOllamaModel(modelId)) return 'ollama';
     if (isLocalModel(modelId)) return 'local';
+    if (modelId.startsWith('x-ai/')) return 'grok';
     return 'openrouter'; // Default fallback
   }
 
@@ -134,6 +135,7 @@ export class RouterboxService {
       case 'localInference':
         return await this.handleLocalRequest(model, messages, imageData, systemPrompt, streaming);
         
+      case 'grok':
       case 'openrouter':
       default:
         return await this.handleOpenRouterRequest(model, messages, temperature, imageData, systemPrompt, streaming);
@@ -381,6 +383,7 @@ export class RouterboxService {
         }
         return await streamLocalChat(model, promptLocal, extractedImageData, systemPrompt, writeCallback, conversationHistoryLocal);
         
+      case 'grok':
       case 'openrouter':
       default:
         return await this.streamOpenRouterRequest(model, messages, temperature, systemPrompt, writeCallback);

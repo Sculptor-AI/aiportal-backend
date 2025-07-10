@@ -19,7 +19,7 @@
         "description": "The query to send to Wolfram Alpha. Can be a natural language question, mathematical expression, or computational request. Examples: 'population of France', 'integrate x^2 dx', 'weather in New York', '10 densest elements'"
       },
       "maxchars": {
-        "type": "integer",
+        "type": "number",
         "description": "Optional. Maximum number of characters in the response (default: 6800, min: 100, max: 10000)",
         "minimum": 100,
         "maximum": 10000,

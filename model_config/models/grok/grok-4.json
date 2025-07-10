@@ -1,0 +1,41 @@
+{
+  "id": "grok-4",
+  "displayName": "Grok 4",
+  "provider": "x-ai",
+  "apiModel": "x-ai/grok-4-07-09",
+  "enabled": true,
+  "routing": {
+    "service": "openrouter",
+    "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+    "apiModel": "x-ai/grok-4-07-09"
+  },
+  "globalRateLimit": {
+    "requests": 800,
+    "window": {
+      "amount": 1,
+      "unit": "hour"
+    }
+  },
+  "userRateLimit": {
+    "requests": 40,
+    "window": {
+      "amount": 6,
+      "unit": "hours"
+    }
+  },
+  "parameters": {
+    "temperature": 0.7,
+    "max_tokens": 256000,
+    "top_p": 1.0,
+    "top_k": 40
+  },
+  "capabilities": {
+    "streaming": true,
+    "vision": true,
+    "functionCalling": true,
+    "webSearch": true,
+    "reasoning": true,
+    "parallelToolCalling": true,
+    "structuredOutputs": true
+  }
+}
