@@ -1,8 +1,8 @@
 {
   "id": "test-calculator",
-  "name": "Test Calculator",
-  "description": "A simple calculator tool for testing",
-  "version": "1.0.0",
+  "name": "Calculator",
+  "description": "A powerful mathematical calculator powered by Wolfram Alpha. Can solve complex mathematical expressions, equations, calculus problems, statistics, and provide step-by-step solutions with visualizations.",
+  "version": "2.0.0",
   "enabled": true,
   "allowedModels": [],
   "maxExecutionTime": 30000,
@@ -13,8 +13,15 @@
   },
   "parameters": {
     "type": "object",
-    "properties": {},
-    "required": [],
+    "properties": {
+      "expression": {
+        "type": "string",
+        "description": "Mathematical expression, equation, or computational query to solve. Supports advanced mathematics including calculus, algebra, statistics, geometry, and more. Examples: '2+2', 'derivative of x^2', 'solve x^2 + 5x + 6 = 0', 'integrate sin(x) from 0 to pi'.",
+        "minLength": 1,
+        "maxLength": 1000
+      }
+    },
+    "required": ["expression"],
     "additionalProperties": false
   },
   "returns": {
@@ -25,24 +32,48 @@
         "description": "Whether the operation was successful"
       },
       "result": {
-        "description": "The result of the operation"
+        "type": "string",
+        "description": "The computational result from Wolfram Alpha"
+      },
+      "expression": {
+        "type": "string",
+        "description": "The original expression that was solved"
+      },
+      "interpretation": {
+        "type": "string",
+        "description": "Wolfram Alpha's interpretation of the input"
+      },
+      "images": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "URLs to generated plots, graphs, or visualizations"
+      },
+      "websiteUrl": {
+        "type": "string",
+        "description": "URL to the full Wolfram Alpha result page"
       },
       "error": {
         "type": "string",
         "description": "Error message if operation failed"
+      },
+      "suggestions": {
+        "type": "string",
+        "description": "Suggestions for fixing the query if it couldn't be interpreted"
       }
     }
   },
   "security": {
     "sandboxed": true,
     "no_file_access": true,
-    "no_network_access": true,
+    "no_network_access": false,
     "memory_limit": "128MB",
     "timeout": 30
   },
   "metadata": {
     "author": "Your Name",
     "created": "2025-07-09T14:06:12.676Z",
-    "updated": "2025-07-09T14:06:12.676Z"
+    "updated": "2025-07-10T00:00:00.000Z"
   }
 }

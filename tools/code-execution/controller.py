@@ -70,26 +70,23 @@ def create_safe_builtins():
 
 def create_safe_modules():
     """Create a restricted set of allowed modules"""
-    safe_modules = {
-        'math': __import__('math'),
-        'statistics': __import__('statistics'),
-        'random': __import__('random'),
-        're': __import__('re'),
-        'uuid': __import__('uuid'),
-        'hashlib': __import__('hashlib'),
-        'base64': __import__('base64'),
-        'json': __import__('json'),
-        'time': __import__('time'),
-        'datetime': __import__('datetime'),
-        'decimal': __import__('decimal'),
-        'fractions': __import__('fractions'),
-        'collections': __import__('collections'),
-        'itertools': __import__('itertools'),
-        'operator': __import__('operator'),
-        'functools': __import__('functools'),
-        'bisect': __import__('bisect'),
-        'heapq': __import__('heapq'),
-    }
+    safe_modules = {}
+    
+    # List of safe modules to import
+    safe_module_names = [
+        'math', 'statistics', 'random', 're', 'uuid', 'hashlib', 'base64',
+        'json', 'time', 'datetime', 'decimal', 'fractions', 'collections',
+        'itertools', 'operator', 'functools', 'bisect', 'heapq'
+    ]
+    
+    # Try to import each module, skip if not available
+    for module_name in safe_module_names:
+        try:
+            safe_modules[module_name] = __import__(module_name)
+        except ImportError:
+            # Skip modules that aren't available
+            continue
+    
     return safe_modules
 
 def validate_code(code):
@@ -153,7 +150,8 @@ def execute_code_safely(code, context_data=None):
             if name in safe_modules:
                 return safe_modules[name]
             else:
-                raise ImportError(f"Module '{name}' is not available in this environment")
+                available_modules = list(safe_modules.keys())
+                raise ImportError(f"Module '{name}' is not available in this environment. Available modules: {available_modules}")
         
         # Add __import__ to safe builtins
         safe_builtins['__import__'] = safe_import

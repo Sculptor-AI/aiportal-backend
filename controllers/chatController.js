@@ -10,16 +10,131 @@ import toolsService from '../services/toolsService.js';
 import systemPromptService from '../services/systemPromptService.js';
 
 /**
- * Handle tool calls in streaming response
+ * Enhanced tool call manager for handling multiple concurrent tool calls
+ */
+class ToolCallManager {
+  constructor() {
+    this.activeCalls = new Map();
+    this.callQueue = [];
+    this.maxConcurrentCalls = 3;
+  }
+
+  /**
+   * Process a tool call with enhanced state management
+   * @param {Object} toolCall - Tool call object
+   * @param {string} modelType - Model type
+   * @param {Function} writeStream - Function to write to stream
+   */
+  async processToolCall(toolCall, modelType, writeStream) {
+    const { id, function: func } = toolCall;
+    const toolName = func.name;
+    const callId = id || `tool_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Send tool call start event
+    writeStream(`data: ${JSON.stringify({
+      type: 'tool_call_start',
+      tool_id: callId,
+      tool_name: toolName,
+      status: 'pending',
+      timestamp: new Date().toISOString(),
+      parameters: func.arguments ? JSON.parse(func.arguments || '{}') : {}
+    })}\n\n`);
+    
+    // Add to active calls
+    this.activeCalls.set(callId, {
+      id: callId,
+      name: toolName,
+      status: 'pending',
+      startTime: Date.now()
+    });
+    
+    try {
+      // Send execution start event
+      writeStream(`data: ${JSON.stringify({
+        type: 'tool_call_executing',
+        tool_id: callId,
+        tool_name: toolName,
+        status: 'executing',
+        timestamp: new Date().toISOString()
+      })}\n\n`);
+      
+      // Update status
+      this.activeCalls.get(callId).status = 'executing';
+      
+      // Execute tool
+      const parameters = JSON.parse(func.arguments || '{}');
+      const result = await toolsService.executeTool(toolName, parameters, modelType);
+      
+      // Calculate execution time
+      const executionTime = Date.now() - this.activeCalls.get(callId).startTime;
+      
+      // Send completion event
+      writeStream(`data: ${JSON.stringify({
+        type: 'tool_call_completed',
+        tool_id: callId,
+        tool_name: toolName,
+        status: 'completed',
+        result: result,
+        execution_time: executionTime,
+        timestamp: new Date().toISOString()
+      })}\n\n`);
+      
+      // Update and remove from active calls
+      this.activeCalls.delete(callId);
+      
+    } catch (error) {
+      const executionTime = Date.now() - this.activeCalls.get(callId).startTime;
+      
+      // Send error event
+      writeStream(`data: ${JSON.stringify({
+        type: 'tool_call_error',
+        tool_id: callId,
+        tool_name: toolName,
+        status: 'error',
+        error: error.message,
+        execution_time: executionTime,
+        timestamp: new Date().toISOString()
+      })}\n\n`);
+      
+      // Remove from active calls
+      this.activeCalls.delete(callId);
+    }
+  }
+
+  /**
+   * Send tool call summary
+   * @param {Function} writeStream - Function to write to stream
+   */
+  sendToolCallSummary(writeStream) {
+    const summary = Array.from(this.activeCalls.values());
+    if (summary.length > 0) {
+      writeStream(`data: ${JSON.stringify({
+        type: 'tool_calls_summary',
+        active_calls: summary,
+        timestamp: new Date().toISOString()
+      })}\n\n`);
+    }
+  }
+}
+
+/**
+ * Handle tool calls in streaming response with enhanced multi-call support
  * @param {string} chunk - Response chunk
  * @param {string} modelType - Model type
  * @param {Function} writeStream - Function to write to stream
+ * @param {ToolCallManager} toolManager - Tool call manager instance
  * @returns {Promise<boolean>} - True if tool call was handled
  */
-async function handleToolCall(chunk, modelType, writeStream) {
+async function handleToolCall(chunk, modelType, writeStream, toolManager = null) {
+  if (!toolManager) {
+    toolManager = new ToolCallManager();
+  }
+  
   try {
     // Parse chunk to check for tool calls
     const lines = chunk.split('\n');
+    let toolCallsFound = false;
+    
     for (const line of lines) {
       if (line.startsWith('data: ') && !line.includes('[DONE]')) {
         try {
@@ -28,57 +143,37 @@ async function handleToolCall(chunk, modelType, writeStream) {
           
           if (choice?.delta?.tool_calls || choice?.message?.tool_calls) {
             const toolCalls = choice.delta?.tool_calls || choice.message?.tool_calls;
+            toolCallsFound = true;
             
-            for (const toolCall of toolCalls) {
+            // Process all tool calls concurrently
+            const promises = toolCalls.map(toolCall => {
               if (toolCall.function?.name) {
-                // Send tool usage indicator
-                writeStream(`data: ${JSON.stringify({
-                  type: 'tool_call',
-                  tool_name: toolCall.function.name,
-                  tool_id: toolCall.id,
-                  status: 'executing'
-                })}\n\n`);
-                
-                try {
-                  // Execute tool
-                  const parameters = JSON.parse(toolCall.function.arguments || '{}');
-                  const result = await toolsService.executeTool(
-                    toolCall.function.name, 
-                    parameters, 
-                    modelType
-                  );
-                  
-                  // Send tool result
-                  writeStream(`data: ${JSON.stringify({
-                    type: 'tool_result',
-                    tool_name: toolCall.function.name,
-                    tool_id: toolCall.id,
-                    status: 'completed',
-                    result: result
-                  })}\n\n`);
-                  
-                } catch (error) {
-                  // Send tool error
-                  writeStream(`data: ${JSON.stringify({
-                    type: 'tool_error',
-                    tool_name: toolCall.function.name,
-                    tool_id: toolCall.id,
-                    status: 'error',
-                    error: error.message
-                  })}\n\n`);
-                }
+                return toolManager.processToolCall(toolCall, modelType, writeStream);
               }
-            }
-            return true;
+              return Promise.resolve();
+            });
+            
+            // Wait for all tool calls to complete
+            await Promise.all(promises);
           }
         } catch (e) {
           // Not JSON or not a tool call, continue
         }
       }
     }
+    
+    return toolCallsFound;
   } catch (error) {
     console.error('Error handling tool call:', error);
+    
+    // Send error event
+    writeStream(`data: ${JSON.stringify({
+      type: 'tool_system_error',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    })}\n\n`);
   }
+  
   return false;
 }
 
@@ -761,20 +856,29 @@ export const streamChat = async (req, res) => {
       }
     );
     
+    // Create tool call manager for this session
+    const toolManager = new ToolCallManager();
+    
     // Pipe the OpenRouter response directly to the client
     response.data.on('data', async (chunk) => {
       const data = chunk.toString();
       
-      // Check for tool calls and handle them
+      // Check for tool calls and handle them with enhanced manager
       const toolHandled = await handleToolCall(data, adjustedModelType, (toolData) => {
         res.write(toolData);
-      });
+      }, toolManager);
       
-      // Forward the original chunk to the client
-      res.write(data);
+      // Forward the original chunk to the client (unless it was a tool call)
+      if (!toolHandled) {
+        res.write(data);
+      }
     });
     
     response.data.on('end', () => {
+      // Send final tool call summary if there were any active calls
+      toolManager.sendToolCallSummary((toolData) => {
+        res.write(toolData);
+      });
       res.end();
     });
     

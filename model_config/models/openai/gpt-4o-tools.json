@@ -38,7 +38,7 @@
   },
   "tools": {
     "enabled": true,
-    "allowedTools": [],
+    "allowedTools": ["test-calculator", "code-execution", "test-tool"],
     "maxConcurrentCalls": 3
   }
 }

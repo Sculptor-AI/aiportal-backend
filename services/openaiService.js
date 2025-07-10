@@ -542,6 +542,10 @@ export const streamOpenAICompatibleChat = async (modelType, prompt, imageData = 
     // Make the streaming API call
     const stream = await openai.chat.completions.create(requestParams);
     
+    // Track tool calls across streaming chunks
+    let toolCalls = [];
+    let isCollectingToolCalls = false;
+    
     // Process the stream
     for await (const chunk of stream) {
       // Format as SSE event
@@ -553,17 +557,125 @@ export const streamOpenAICompatibleChat = async (modelType, prompt, imageData = 
         choices: chunk.choices || []
       };
       
-      // Check if this is the final chunk
-      if (chunk.choices?.[0]?.finish_reason) {
+      // Check for tool calls in the chunk
+      if (chunk.choices?.[0]?.delta?.tool_calls) {
+        isCollectingToolCalls = true;
+        const deltaToolCalls = chunk.choices[0].delta.tool_calls;
+        
+        // Merge tool calls
+        for (const deltaToolCall of deltaToolCalls) {
+          if (deltaToolCall.index !== undefined) {
+            if (!toolCalls[deltaToolCall.index]) {
+              toolCalls[deltaToolCall.index] = {
+                id: deltaToolCall.id,
+                type: deltaToolCall.type,
+                function: {
+                  name: deltaToolCall.function?.name || '',
+                  arguments: deltaToolCall.function?.arguments || ''
+                }
+              };
+            } else {
+              if (deltaToolCall.function?.name) {
+                toolCalls[deltaToolCall.index].function.name += deltaToolCall.function.name;
+              }
+              if (deltaToolCall.function?.arguments) {
+                toolCalls[deltaToolCall.index].function.arguments += deltaToolCall.function.arguments;
+              }
+            }
+          }
+        }
+        
+        // Send the tool call chunk to frontend
         onChunk(`data: ${JSON.stringify(sseData)}\n\n`);
-        onChunk('data: [DONE]\n\n');
+      }
+      
+      // Check if this is the final chunk or tool calls finish
+      if (chunk.choices?.[0]?.finish_reason === 'tool_calls' || (chunk.choices?.[0]?.finish_reason && isCollectingToolCalls)) {
+        // If we have tool calls, execute them
+        if (isCollectingToolCalls && toolCalls.length > 0) {
+          // Execute tool calls
+          const toolResults = [];
+          
+          for (const toolCall of toolCalls) {
+            if (toolCall.function && toolCall.function.name) {
+              try {
+                const toolsService = await import('./toolsService.js');
+                const parameters = JSON.parse(toolCall.function.arguments || '{}');
+                const result = await toolsService.default.executeTool(
+                  toolCall.function.name, 
+                  parameters, 
+                  modelType
+                );
+                toolResults.push({
+                  tool_call_id: toolCall.id,
+                  role: 'tool',
+                  content: JSON.stringify(result)
+                });
+              } catch (error) {
+                console.error(`Error executing tool ${toolCall.function.name}:`, error);
+                toolResults.push({
+                  tool_call_id: toolCall.id,
+                  role: 'tool',
+                  content: JSON.stringify({ error: error.message })
+                });
+              }
+            }
+          }
+          
+          // If we have tool results, make a follow-up streaming call
+          if (toolResults.length > 0) {
+            const messagesWithResults = [
+              ...requestParams.messages,
+              {
+                role: 'assistant',
+                content: null,
+                tool_calls: toolCalls
+              },
+              ...toolResults
+            ];
+            
+            const followUpParams = {
+              ...requestParams,
+              messages: messagesWithResults
+            };
+            
+            // Make follow-up streaming call
+            const followUpStream = await openai.chat.completions.create(followUpParams);
+            
+            for await (const followUpChunk of followUpStream) {
+              const followUpSseData = {
+                id: followUpChunk.id || `openai-compatible-follow-${Date.now()}`,
+                object: followUpChunk.object || 'chat.completion.chunk',
+                created: followUpChunk.created || Math.floor(Date.now() / 1000),
+                model: modelType,
+                choices: followUpChunk.choices || []
+              };
+              
+              if (followUpChunk.choices?.[0]?.finish_reason) {
+                onChunk(`data: ${JSON.stringify(followUpSseData)}\n\n`);
+                onChunk('data: [DONE]\n\n');
+                return;
+              } else {
+                const hasContent = followUpChunk.choices?.[0]?.delta?.content;
+                if (hasContent) {
+                  onChunk(`data: ${JSON.stringify(followUpSseData)}\n\n`);
+                }
+              }
+            }
+          }
+        }
+        
+        // Only send done if we're not handling tool calls
+        if (!isCollectingToolCalls) {
+          onChunk(`data: ${JSON.stringify(sseData)}\n\n`);
+          onChunk('data: [DONE]\n\n');
+        }
         break;
       } else {
-        // Only send chunks with content or tool calls
+        // Only send chunks with content (tool calls are handled above)
         const hasContent = chunk.choices?.[0]?.delta?.content;
-        const hasToolCalls = chunk.choices?.[0]?.delta?.tool_calls;
         
-        if (hasContent || hasToolCalls) {
+        if (hasContent) {
           onChunk(`data: ${JSON.stringify(sseData)}\n\n`);
         }
       }
@@ -678,6 +790,10 @@ export const streamOpenAIChat = async (modelType, prompt, imageData = null, syst
     // Make the streaming API call
     const stream = await openai.chat.completions.create(requestParams);
     
+    // Track tool calls across streaming chunks
+    let toolCalls = [];
+    let isCollectingToolCalls = false;
+    
     // Process the stream
     for await (const chunk of stream) {
       // Format as SSE event
@@ -689,17 +805,125 @@ export const streamOpenAIChat = async (modelType, prompt, imageData = null, syst
         choices: chunk.choices || []
       };
       
-      // Check if this is the final chunk
-      if (chunk.choices?.[0]?.finish_reason) {
+      // Check for tool calls in the chunk
+      if (chunk.choices?.[0]?.delta?.tool_calls) {
+        isCollectingToolCalls = true;
+        const deltaToolCalls = chunk.choices[0].delta.tool_calls;
+        
+        // Merge tool calls
+        for (const deltaToolCall of deltaToolCalls) {
+          if (deltaToolCall.index !== undefined) {
+            if (!toolCalls[deltaToolCall.index]) {
+              toolCalls[deltaToolCall.index] = {
+                id: deltaToolCall.id,
+                type: deltaToolCall.type,
+                function: {
+                  name: deltaToolCall.function?.name || '',
+                  arguments: deltaToolCall.function?.arguments || ''
+                }
+              };
+            } else {
+              if (deltaToolCall.function?.name) {
+                toolCalls[deltaToolCall.index].function.name += deltaToolCall.function.name;
+              }
+              if (deltaToolCall.function?.arguments) {
+                toolCalls[deltaToolCall.index].function.arguments += deltaToolCall.function.arguments;
+              }
+            }
+          }
+        }
+        
+        // Send the tool call chunk to frontend
         onChunk(`data: ${JSON.stringify(sseData)}\n\n`);
-        onChunk('data: [DONE]\n\n');
+      }
+      
+      // Check if this is the final chunk or tool calls finish
+      if (chunk.choices?.[0]?.finish_reason === 'tool_calls' || (chunk.choices?.[0]?.finish_reason && isCollectingToolCalls)) {
+        // If we have tool calls, execute them
+        if (isCollectingToolCalls && toolCalls.length > 0) {
+          // Execute tool calls
+          const toolResults = [];
+          
+          for (const toolCall of toolCalls) {
+            if (toolCall.function && toolCall.function.name) {
+              try {
+                const toolsService = await import('./toolsService.js');
+                const parameters = JSON.parse(toolCall.function.arguments || '{}');
+                const result = await toolsService.default.executeTool(
+                  toolCall.function.name, 
+                  parameters, 
+                  modelType
+                );
+                toolResults.push({
+                  tool_call_id: toolCall.id,
+                  role: 'tool',
+                  content: JSON.stringify(result)
+                });
+              } catch (error) {
+                console.error(`Error executing tool ${toolCall.function.name}:`, error);
+                toolResults.push({
+                  tool_call_id: toolCall.id,
+                  role: 'tool',
+                  content: JSON.stringify({ error: error.message })
+                });
+              }
+            }
+          }
+          
+          // If we have tool results, make a follow-up streaming call
+          if (toolResults.length > 0) {
+            const messagesWithResults = [
+              ...requestParams.messages,
+              {
+                role: 'assistant',
+                content: null,
+                tool_calls: toolCalls
+              },
+              ...toolResults
+            ];
+            
+            const followUpParams = {
+              ...requestParams,
+              messages: messagesWithResults
+            };
+            
+            // Make follow-up streaming call
+            const followUpStream = await openai.chat.completions.create(followUpParams);
+            
+            for await (const followUpChunk of followUpStream) {
+              const followUpSseData = {
+                id: followUpChunk.id || `openai-follow-${Date.now()}`,
+                object: followUpChunk.object || 'chat.completion.chunk',
+                created: followUpChunk.created || Math.floor(Date.now() / 1000),
+                model: modelType,
+                choices: followUpChunk.choices || []
+              };
+              
+              if (followUpChunk.choices?.[0]?.finish_reason) {
+                onChunk(`data: ${JSON.stringify(followUpSseData)}\n\n`);
+                onChunk('data: [DONE]\n\n');
+                return;
+              } else {
+                const hasContent = followUpChunk.choices?.[0]?.delta?.content;
+                if (hasContent) {
+                  onChunk(`data: ${JSON.stringify(followUpSseData)}\n\n`);
+                }
+              }
+            }
+          }
+        }
+        
+        // Only send done if we're not handling tool calls
+        if (!isCollectingToolCalls) {
+          onChunk(`data: ${JSON.stringify(sseData)}\n\n`);
+          onChunk('data: [DONE]\n\n');
+        }
         break;
       } else {
-        // Only send chunks with content or tool calls
+        // Only send chunks with content (tool calls are handled above)
         const hasContent = chunk.choices?.[0]?.delta?.content;
-        const hasToolCalls = chunk.choices?.[0]?.delta?.tool_calls;
         
-        if (hasContent || hasToolCalls) {
+        if (hasContent) {
           onChunk(`data: ${JSON.stringify(sseData)}\n\n`);
         }
       }
