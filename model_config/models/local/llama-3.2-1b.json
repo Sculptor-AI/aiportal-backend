@@ -34,6 +34,6 @@
     "streaming": false,
     "vision": false,
     "functionCalling": false,
-    "webSearch": false
+    "webSearch": true
   }
 }

@@ -637,14 +637,35 @@ export const streamChat = async (req, res) => {
       console.log(`Detected OpenAI model for streaming: ${modelType}`);
       
       try {
+        // Create tool call manager for enhanced tool handling
+        const toolManager = new ToolCallManager();
+        
+        // Use enhanced streaming with tool manager
         await streamOpenAIChat(
           modelType,
           prompt,
           imageData,
           systemPromptService.generateSystemPrompt(systemPrompt, modelType),
-          (chunk) => res.write(chunk),
-          messages
+          async (chunk) => {
+            // Check for tool calls and handle them with enhanced manager
+            const toolHandled = await handleToolCall(chunk, modelType, (toolData) => {
+              res.write(toolData);
+            }, toolManager);
+            
+            // Forward the original chunk to the client (unless it was a tool call)
+            if (!toolHandled) {
+              res.write(chunk);
+            }
+          },
+          messages,
+          true // Disable internal tool handling in OpenAI service
         );
+        
+        // Send final tool call summary if there were any active calls
+        toolManager.sendToolCallSummary((toolData) => {
+          res.write(toolData);
+        });
+        
         return res.end();
       } catch (error) {
         console.error('Error in OpenAI streaming:', error);

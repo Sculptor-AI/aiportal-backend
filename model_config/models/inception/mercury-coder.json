@@ -33,7 +33,7 @@
     "streaming": true,
     "vision": false,
     "functionCalling": false,
-    "webSearch": false,
+    "webSearch": true,
     "coding": true,
     "speed": "5-10x faster than traditional models"
   },

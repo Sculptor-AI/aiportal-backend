@@ -33,7 +33,7 @@
     "streaming": true,
     "vision": false,
     "functionCalling": false,
-    "webSearch": false,
+    "webSearch": true,
     "speed": "5-10x faster than traditional models"
   },
   "description": "Mercury is the first diffusion large language model (dLLM). Applying a breakthrough discrete diffusion approach, the model runs 5-10x faster than even speed optimized models."

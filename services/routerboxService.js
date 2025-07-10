@@ -246,12 +246,12 @@ export class RouterboxService {
           const lastMessageOpenAI = messages[messages.length - 1];
           const promptOpenAI = lastMessageOpenAI?.content || '';
           const conversationHistoryOpenAI = messages.slice(0, -1);
-          return await streamOpenAICompatibleChat(model, promptOpenAI, imageData, systemPrompt, writeCallback, conversationHistoryOpenAI, modelConfig);
+          return await streamOpenAICompatibleChat(model, promptOpenAI, imageData, systemPrompt, writeCallback, conversationHistoryOpenAI, modelConfig, false);
         } else {
           const lastMessageOpenAI = messages[messages.length - 1];
           const promptOpenAI = lastMessageOpenAI?.content || '';
           const conversationHistoryOpenAI = messages.slice(0, -1);
-          return await streamOpenAIChat(model, promptOpenAI, imageData, systemPrompt, writeCallback, conversationHistoryOpenAI);
+          return await streamOpenAIChat(model, promptOpenAI, imageData, systemPrompt, writeCallback, conversationHistoryOpenAI, false);
         }
         
       case 'gemini':

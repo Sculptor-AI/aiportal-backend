@@ -427,7 +427,7 @@ export const processOpenAIChat = async (modelType, prompt, imageData = null, sys
 /**
  * Process a streaming OpenAI-compatible chat request with custom endpoint
  */
-export const streamOpenAICompatibleChat = async (modelType, prompt, imageData = null, systemPrompt = null, onChunk, conversationHistory = [], modelConfig = null) => {
+export const streamOpenAICompatibleChat = async (modelType, prompt, imageData = null, systemPrompt = null, onChunk, conversationHistory = [], modelConfig = null, disableInternalToolHandling = false) => {
   try {
     // Select the appropriate API key based on the model provider
     let apiKey;
@@ -592,7 +592,7 @@ export const streamOpenAICompatibleChat = async (modelType, prompt, imageData = 
       // Check if this is the final chunk or tool calls finish
       if (chunk.choices?.[0]?.finish_reason === 'tool_calls' || (chunk.choices?.[0]?.finish_reason && isCollectingToolCalls)) {
         // If we have tool calls, execute them
-        if (isCollectingToolCalls && toolCalls.length > 0) {
+        if (!disableInternalToolHandling && isCollectingToolCalls && toolCalls.length > 0) {
           // Execute tool calls
           const toolResults = [];
           
@@ -690,7 +690,7 @@ export const streamOpenAICompatibleChat = async (modelType, prompt, imageData = 
 /**
  * Process a streaming OpenAI chat request
  */
-export const streamOpenAIChat = async (modelType, prompt, imageData = null, systemPrompt = null, onChunk, conversationHistory = []) => {
+export const streamOpenAIChat = async (modelType, prompt, imageData = null, systemPrompt = null, onChunk, conversationHistory = [], disableInternalToolHandling = false) => {
   try {
     const openai = initializeOpenAIClient();
     const modelName = getApiModelName(modelType);
@@ -840,7 +840,7 @@ export const streamOpenAIChat = async (modelType, prompt, imageData = null, syst
       // Check if this is the final chunk or tool calls finish
       if (chunk.choices?.[0]?.finish_reason === 'tool_calls' || (chunk.choices?.[0]?.finish_reason && isCollectingToolCalls)) {
         // If we have tool calls, execute them
-        if (isCollectingToolCalls && toolCalls.length > 0) {
+        if (!disableInternalToolHandling && isCollectingToolCalls && toolCalls.length > 0) {
           // Execute tool calls
           const toolResults = [];
           
