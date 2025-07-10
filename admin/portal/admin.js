@@ -12,6 +12,19 @@ class AdminPortal {
         this.setupEventListeners();
     }
 
+    // HTML escaping function to prevent XSS attacks
+    escapeHtml(unsafe) {
+        if (unsafe === null || unsafe === undefined) {
+            return '';
+        }
+        return String(unsafe)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
     setupEventListeners() {
         document.getElementById('loginForm').addEventListener('submit', (e) => {
             e.preventDefault();
@@ -124,23 +137,23 @@ class AdminPortal {
         const container = document.getElementById('statsContainer');
         container.innerHTML = `
             <div class="stat-card">
-                <div class="stat-number">${stats.totalUsers}</div>
+                <div class="stat-number">${this.escapeHtml(stats.totalUsers)}</div>
                 <div class="stat-label">Total Users</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number">${stats.pendingUsers}</div>
+                <div class="stat-number">${this.escapeHtml(stats.pendingUsers)}</div>
                 <div class="stat-label">Pending Users</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number">${stats.activeUsers}</div>
+                <div class="stat-number">${this.escapeHtml(stats.activeUsers)}</div>
                 <div class="stat-label">Active Users</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number">${stats.adminUsers}</div>
+                <div class="stat-number">${this.escapeHtml(stats.adminUsers)}</div>
                 <div class="stat-label">Admin Users</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number">${stats.totalApiKeys}</div>
+                <div class="stat-number">${this.escapeHtml(stats.totalApiKeys)}</div>
                 <div class="stat-label">API Keys</div>
             </div>
         `;
@@ -178,18 +191,18 @@ class AdminPortal {
         `;
         
         users.forEach(user => {
-            const statusClass = `status-${user.status}`;
+            const statusClass = `status-${this.escapeHtml(user.status)}`;
             const createdDate = new Date(user.created_at).toLocaleDateString();
             const lastLogin = user.last_login ? new Date(user.last_login).toLocaleDateString() : 'Never';
             
             html += `
                 <tr>
-                    <td>${user.id}</td>
-                    <td>${user.username}</td>
-                    <td>${user.email || 'N/A'}</td>
-                    <td><span class="${statusClass}">${user.status}</span></td>
-                    <td>${createdDate}</td>
-                    <td>${lastLogin}</td>
+                    <td>${this.escapeHtml(user.id)}</td>
+                    <td>${this.escapeHtml(user.username)}</td>
+                    <td>${this.escapeHtml(user.email || 'N/A')}</td>
+                    <td><span class="${statusClass}">${this.escapeHtml(user.status)}</span></td>
+                    <td>${this.escapeHtml(createdDate)}</td>
+                    <td>${this.escapeHtml(lastLogin)}</td>
                     <td>
                         <button class="btn btn-success" onclick="portal.changeUserStatus(${user.id}, 'active')">Active</button>
                         <button class="btn btn-warning" onclick="portal.changeUserStatus(${user.id}, 'pending')">Pending</button>
@@ -291,17 +304,17 @@ class AdminPortal {
             
             html += `
                 <tr>
-                    <td>${model.id}</td>
-                    <td>${model.displayName}</td>
-                    <td>${model.provider}</td>
-                    <td>${model.apiModel}</td>
+                    <td>${this.escapeHtml(model.id)}</td>
+                    <td>${this.escapeHtml(model.displayName)}</td>
+                    <td>${this.escapeHtml(model.provider)}</td>
+                    <td>${this.escapeHtml(model.apiModel)}</td>
                     <td>${model.enabled ? 'Yes' : 'No'}</td>
-                    <td>${globalLimit}</td>
-                    <td>${userLimit}</td>
+                    <td>${this.escapeHtml(globalLimit)}</td>
+                    <td>${this.escapeHtml(userLimit)}</td>
                     <td>
-                        <button class="btn btn-warning" onclick="portal.editModel('${model.id}')">Edit</button>
-                        <button class="btn ${model.enabled ? 'btn-danger' : 'btn-success'}" onclick="portal.toggleModel('${model.id}', ${!model.enabled})">${model.enabled ? 'Disable' : 'Enable'}</button>
-                        <button class="btn btn-danger" onclick="portal.deleteModel('${model.id}')">Delete</button>
+                        <button class="btn btn-warning" onclick="portal.editModel('${this.escapeHtml(model.id).replace(/'/g, '&apos;')}')">Edit</button>
+                        <button class="btn ${model.enabled ? 'btn-danger' : 'btn-success'}" onclick="portal.toggleModel('${this.escapeHtml(model.id).replace(/'/g, '&apos;')}', ${!model.enabled})">${model.enabled ? 'Disable' : 'Enable'}</button>
+                        <button class="btn btn-danger" onclick="portal.deleteModel('${this.escapeHtml(model.id).replace(/'/g, '&apos;')}')">Delete</button>
                     </td>
                 </tr>
             `;

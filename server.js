@@ -46,10 +46,33 @@ const corsOptions = {
 };
 
 // Middleware
-// Disable helmet for local development to avoid CORS issues
-// app.use(helmet({ 
-//   crossOriginResourcePolicy: { policy: "cross-origin" } 
-// })); 
+// Security headers with Helmet.js
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", "wss:", "ws:", "https:"],
+      fontSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
+  crossOriginEmbedderPolicy: false, // Disable for API compatibility
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  },
+  noSniff: true,
+  xssFilter: true,
+  referrerPolicy: { policy: "strict-origin-when-cross-origin" }
+}));
 
 // Enable CORS - this must come before other middleware
 app.use(cors(corsOptions));
@@ -76,6 +99,32 @@ app.use(express.urlencoded({ limit: '50mb', extended: true })); // Also increase
 // Log requests for debugging
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
+
+// Basic CSRF protection for non-API routes
+app.use((req, res, next) => {
+  // Skip CSRF for API routes (they use token-based auth)
+  if (req.path.startsWith('/api/')) {
+    return next();
+  }
+  
+  // Skip for GET, HEAD, OPTIONS
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    return next();
+  }
+  
+  // Check for CSRF token in header or body
+  const token = req.headers['x-csrf-token'] || req.body._token;
+  const sessionToken = req.session?.csrfToken;
+  
+  if (!sessionToken || token !== sessionToken) {
+    return res.status(403).json({
+      success: false,
+      error: 'CSRF token validation failed'
+    });
+  }
+  
   next();
 });
 

@@ -179,8 +179,12 @@ export class AdminService {
     const updateFields = [];
     const updateValues = [];
 
+    // Validate that all field names are safe and in allowedFields
     for (const [field, value] of Object.entries(updates)) {
-      if (allowedFields.includes(field) && value !== undefined) {
+      if (!allowedFields.includes(field)) {
+        throw new Error(`Field '${field}' is not allowed to be updated`);
+      }
+      if (value !== undefined) {
         updateFields.push(`${field} = ?`);
         updateValues.push(value);
       }
@@ -193,6 +197,7 @@ export class AdminService {
     updateFields.push('updated_at = CURRENT_TIMESTAMP');
     updateValues.push(userId);
 
+    // Use parameterized query to prevent SQL injection
     const query = `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`;
     await database.run(query, updateValues);
   }

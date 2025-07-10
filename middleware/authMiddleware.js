@@ -108,8 +108,6 @@ export const optionalAuth = async (req, res, next) => {
 
 export const requireAdmin = async (req, res, next) => {
   try {
-    // For now, treat all authenticated users as admins
-    // In a production system, you'd check user.role or similar
     if (!req.user) {
       return res.status(401).json({
         success: false,
@@ -117,13 +115,17 @@ export const requireAdmin = async (req, res, next) => {
       });
     }
     
-    // TODO: Add proper admin role checking when user roles are implemented
-    // if (req.user.role !== 'admin') {
-    //   return res.status(403).json({
-    //     success: false,
-    //     error: 'Admin access required'
-    //   });
-    // }
+    // Import AdminService to check if user is admin
+    const { AdminService } = await import('../admin/adminService.js');
+    
+    // Check if user is actually an admin
+    const isAdmin = await AdminService.isUserAdmin(req.user.id);
+    if (!isAdmin) {
+      return res.status(403).json({
+        success: false,
+        error: 'Admin access required'
+      });
+    }
     
     next();
   } catch (error) {

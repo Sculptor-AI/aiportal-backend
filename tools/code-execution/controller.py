@@ -105,13 +105,53 @@ def validate_code(code):
         'reload(', 'importlib',
         'pickle', 'cPickle', 'marshal', 'shelve',
         'code.', 'ast.', 'compile',
+        # Additional security patterns
+        'lambda:', 'chr(', 'ord(', 'hex(', 'oct(',
+        '\\x', '\\u', '\\U', '\\n', '\\r', '\\t',  # Escape sequences
+        'dir(', 'vars(', 'help(', 'id(',
+        'hasattr(', 'callable(',
+        '__dict__', '__class__', '__module__', '__weakref__',
+        'property(', 'staticmethod(', 'classmethod(',
+        'type(', 'super(', 'isinstance(', 'issubclass(',
+        'memoryview(', 'bytearray(', 'bytes(',
+        # String manipulation that could be used for obfuscation
+        '.join(', '.format(', 'f"', "f'",
+        '+ "', "+ '", '" +', "' +",
+        # Potential bypass patterns
+        'getattr', 'setattr', 'delattr', 'hasattr',
+        'vars()', 'dir()', '__dict__'
     ]
+    
+    # Additional pattern checks for obfuscation attempts
+    obfuscation_patterns = [
+        # String concatenation patterns that could hide imports
+        r'["\'][^"\']*["\']\s*\+\s*["\'][^"\']*["\']',
+        # Variable assignment followed by exec/eval
+        r'\w+\s*=\s*["\'][^"\']*["\'].*(?:exec|eval)',
+        # Function calls with variable names
+        r'(?:exec|eval)\s*\(\s*\w+\s*\)',
+    ]
+    
+    import re
     
     # Check for dangerous patterns
     code_lower = code.lower()
     for pattern in dangerous_patterns:
         if pattern.lower() in code_lower:
             return False, f"Code contains potentially dangerous operation: {pattern}"
+    
+    # Check for obfuscation patterns
+    for pattern in obfuscation_patterns:
+        if re.search(pattern, code, re.IGNORECASE):
+            return False, f"Code contains potential obfuscation pattern"
+    
+    # Check for unusual import syntax
+    if re.search(r'__import__\s*\(', code):
+        return False, "Direct __import__ calls are not allowed"
+    
+    # Check for attribute access that could be used for bypassing
+    if re.search(r'\.\s*__\w+__', code):
+        return False, "Direct access to dunder attributes is not allowed"
     
     return True, None
 
@@ -182,17 +222,23 @@ def execute_code_safely(code, context_data=None):
         result = None
         
         with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
-            # Execute the code
+            # Execute the code in the most restrictive way possible
             try:
-                # Use exec for statements, eval for expressions
-                if '\n' in code or any(keyword in code for keyword in ['if ', 'for ', 'while ', 'def ', 'class ', 'try:', 'with ']):
-                    # Multi-line code or statements
-                    exec(code, exec_namespace)
-                    # Try to get the result from the last expression
+                # Parse the code to detect if it's an expression or statement
+                import ast
+                try:
+                    # Try to parse as expression first
+                    ast.parse(code, mode='eval')
+                    # If successful, it's an expression - use eval
+                    result = eval(code, {"__builtins__": safe_builtins}, exec_namespace)
+                except SyntaxError:
+                    # If that fails, try as statement - use exec
+                    compiled_code = compile(code, '<string>', 'exec')
+                    # Execute with restricted globals and locals
+                    exec(compiled_code, {"__builtins__": safe_builtins}, exec_namespace)
+                    # Try to get the result from the last expression or a 'result' variable
                     result = exec_namespace.get('result', None)
-                else:
-                    # Single expression
-                    result = eval(code, exec_namespace)
+                    
             except Exception as e:
                 # Cancel alarm before handling exception
                 signal.alarm(0)

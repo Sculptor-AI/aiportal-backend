@@ -173,9 +173,14 @@ export class CustomModelService {
     modelData.created_by = userId;
     modelData.is_active = true;
 
-    // Save to file
-    const filename = modelData.id.replace('custom/', '') + '.json';
+    // Save to file with path traversal protection
+    const filename = this.sanitizeFilename(modelData.id.replace('custom/', '')) + '.json';
     const filePath = path.join(this.customModelsPath, filename);
+    
+    // Ensure the resolved path is still within the custom models directory
+    if (!this.isPathSafe(filePath)) {
+      throw new Error('Invalid model ID: path traversal detected');
+    }
     
     fs.writeFileSync(filePath, JSON.stringify(modelData, null, 2));
     
@@ -201,9 +206,14 @@ export class CustomModelService {
       throw new Error('Invalid model structure after update');
     }
 
-    // Save to file
-    const filename = modelId.replace('custom/', '') + '.json';
+    // Save to file with path traversal protection
+    const filename = this.sanitizeFilename(modelId.replace('custom/', '')) + '.json';
     const filePath = path.join(this.customModelsPath, filename);
+    
+    // Ensure the resolved path is still within the custom models directory
+    if (!this.isPathSafe(filePath)) {
+      throw new Error('Invalid model ID: path traversal detected');
+    }
     
     fs.writeFileSync(filePath, JSON.stringify(updatedModel, null, 2));
     
@@ -229,5 +239,21 @@ export class CustomModelService {
     // This would check against the database rate_limits table
     // For now, just return true
     return true;
+  }
+
+  // Security helper methods
+  static sanitizeFilename(filename) {
+    // Remove any path traversal characters and other dangerous characters
+    return filename.replace(/[^a-zA-Z0-9._-]/g, '');
+  }
+
+  static isPathSafe(filePath) {
+    // Resolve the path and check if it's within the custom models directory
+    const resolvedPath = path.resolve(filePath);
+    const resolvedCustomModelsPath = path.resolve(this.customModelsPath);
+    
+    // Check if the resolved path starts with the custom models directory
+    return resolvedPath.startsWith(resolvedCustomModelsPath + path.sep) || 
+           resolvedPath === resolvedCustomModelsPath;
   }
 }

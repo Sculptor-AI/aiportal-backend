@@ -11,8 +11,24 @@ const SALT_ROUNDS = 12;
 export class AuthService {
   
   static validatePassword(password) {
-    if (!password || password.length < 8) {
+    if (!password || typeof password !== 'string') {
+      return { valid: false, message: 'Password is required' };
+    }
+    
+    if (password.length < 8) {
       return { valid: false, message: 'Password must be at least 8 characters long' };
+    }
+    
+    if (password.length > 128) {
+      return { valid: false, message: 'Password must be less than 128 characters long' };
+    }
+    
+    if (!/[a-z]/.test(password)) {
+      return { valid: false, message: 'Password must contain at least one lowercase letter' };
+    }
+    
+    if (!/[A-Z]/.test(password)) {
+      return { valid: false, message: 'Password must contain at least one uppercase letter' };
     }
     
     if (!/\d/.test(password)) {
@@ -21,6 +37,16 @@ export class AuthService {
     
     if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
       return { valid: false, message: 'Password must contain at least one special character' };
+    }
+    
+    // Check for common weak passwords
+    const commonPasswords = [
+      'password', '12345678', 'qwerty123', 'admin123', 
+      'password123', 'letmein123', 'welcome123', 'abc123456'
+    ];
+    
+    if (commonPasswords.includes(password.toLowerCase())) {
+      return { valid: false, message: 'Password is too common. Please choose a stronger password' };
     }
     
     return { valid: true };

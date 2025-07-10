@@ -8,6 +8,162 @@ import toolsService from '../services/toolsService.js';
 import adminToolsRoutes from '../routes/adminToolsRoutes.js';
 import bcrypt from 'bcrypt';
 
+// Input validation middleware
+const validateInput = {
+  userId: (req, res, next) => {
+    const { userId } = req.params;
+    if (!userId || !/^\d+$/.test(userId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid user ID format'
+      });
+    }
+    req.params.userId = parseInt(userId);
+    next();
+  },
+
+  userStatus: (req, res, next) => {
+    const { status } = req.body;
+    const validStatuses = ['pending', 'active', 'admin'];
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: `Status must be one of: ${validStatuses.join(', ')}`
+      });
+    }
+    next();
+  },
+
+  userDetails: (req, res, next) => {
+    const { username, email, password } = req.body;
+    
+    if (username !== undefined) {
+      if (typeof username !== 'string' || username.length < 3 || username.length > 50) {
+        return res.status(400).json({
+          success: false,
+          error: 'Username must be a string between 3 and 50 characters'
+        });
+      }
+      if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Username can only contain letters, numbers, underscores, and hyphens'
+        });
+      }
+    }
+
+    if (email !== undefined) {
+      if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid email format'
+        });
+      }
+    }
+
+    if (password !== undefined) {
+      if (typeof password !== 'string' || password.length < 8) {
+        return res.status(400).json({
+          success: false,
+          error: 'Password must be at least 8 characters long'
+        });
+      }
+    }
+    
+    next();
+  },
+
+  modelId: (req, res, next) => {
+    const { modelId } = req.params;
+    if (!modelId || typeof modelId !== 'string' || modelId.length > 100) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid model ID format'
+      });
+    }
+    // Sanitize model ID to prevent injection
+    if (!/^[a-zA-Z0-9._/-]+$/.test(modelId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Model ID contains invalid characters'
+      });
+    }
+    next();
+  },
+
+  modelConfig: (req, res, next) => {
+    const config = req.body;
+    
+    if (!config || typeof config !== 'object') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid model configuration'
+      });
+    }
+
+    // Validate required fields for new models
+    if (req.method === 'POST') {
+      const requiredFields = ['id', 'displayName', 'provider', 'apiModel'];
+      for (const field of requiredFields) {
+        if (!config[field] || typeof config[field] !== 'string') {
+          return res.status(400).json({
+            success: false,
+            error: `Missing or invalid required field: ${field}`
+          });
+        }
+      }
+    }
+
+    // Validate optional fields
+    if (config.enabled !== undefined && typeof config.enabled !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        error: 'enabled field must be a boolean'
+      });
+    }
+
+    next();
+  },
+
+  toolId: (req, res, next) => {
+    const { toolId } = req.params;
+    if (!toolId || typeof toolId !== 'string' || toolId.length > 100) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid tool ID format'
+      });
+    }
+    // Sanitize tool ID
+    if (!/^[a-zA-Z0-9._-]+$/.test(toolId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Tool ID contains invalid characters'
+      });
+    }
+    next();
+  },
+
+  loginCredentials: (req, res, next) => {
+    const { username, password } = req.body;
+    
+    if (!username || typeof username !== 'string' || username.length < 3 || username.length > 50) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid username format'
+      });
+    }
+    
+    if (!password || typeof password !== 'string' || password.length < 1) {
+      return res.status(400).json({
+        success: false,
+        error: 'Password is required'
+      });
+    }
+    
+    next();
+  }
+};
+
 const router = express.Router();
 
 // Rate limiting for admin endpoints
@@ -27,7 +183,7 @@ const adminLimiter = rateLimit({
 router.use(adminLimiter);
 
 // Admin login endpoint - generate admin token
-router.post('/auth/login', async (req, res) => {
+router.post('/auth/login', validateInput.loginCredentials, async (req, res) => {
   try {
     const { username, password } = req.body;
 
@@ -115,7 +271,7 @@ router.get('/users', requireAdmin, async (req, res) => {
 });
 
 // Get user by ID
-router.get('/users/:userId', requireAdmin, async (req, res) => {
+router.get('/users/:userId', requireAdmin, validateInput.userId, async (req, res) => {
   try {
     const { userId } = req.params;
     const user = await AdminService.getUserById(userId);
@@ -143,7 +299,7 @@ router.get('/users/:userId', requireAdmin, async (req, res) => {
 });
 
 // Update user status
-router.put('/users/:userId/status', requireAdmin, async (req, res) => {
+router.put('/users/:userId/status', requireAdmin, validateInput.userId, validateInput.userStatus, async (req, res) => {
   try {
     const { userId } = req.params;
     const { status } = req.body;
@@ -171,7 +327,7 @@ router.put('/users/:userId/status', requireAdmin, async (req, res) => {
 });
 
 // Update user details
-router.put('/users/:userId', requireAdmin, async (req, res) => {
+router.put('/users/:userId', requireAdmin, validateInput.userId, validateInput.userDetails, async (req, res) => {
   try {
     const { userId } = req.params;
     const { username, email, password } = req.body;
@@ -232,7 +388,7 @@ router.get('/models', requireAdmin, async (req, res) => {
 });
 
 // Get model configuration by ID
-router.get('/models/:modelId', requireAdmin, async (req, res) => {
+router.get('/models/:modelId', requireAdmin, validateInput.modelId, async (req, res) => {
   try {
     const { modelId } = req.params;
     const model = await modelConfigService.getModelById(modelId);
@@ -260,7 +416,7 @@ router.get('/models/:modelId', requireAdmin, async (req, res) => {
 });
 
 // Create new model configuration
-router.post('/models', requireAdmin, async (req, res) => {
+router.post('/models', requireAdmin, validateInput.modelConfig, async (req, res) => {
   try {
     const modelConfig = req.body;
     
@@ -283,7 +439,7 @@ router.post('/models', requireAdmin, async (req, res) => {
 });
 
 // Update model configuration
-router.put('/models/:modelId', requireAdmin, async (req, res) => {
+router.put('/models/:modelId', requireAdmin, validateInput.modelId, validateInput.modelConfig, async (req, res) => {
   try {
     const { modelId } = req.params;
     const modelConfig = req.body;
@@ -304,7 +460,7 @@ router.put('/models/:modelId', requireAdmin, async (req, res) => {
 });
 
 // Delete model configuration
-router.delete('/models/:modelId', requireAdmin, async (req, res) => {
+router.delete('/models/:modelId', requireAdmin, validateInput.modelId, async (req, res) => {
   try {
     const { modelId } = req.params;
     
@@ -378,7 +534,7 @@ router.get('/tools', requireAdmin, async (req, res) => {
 });
 
 // Get tool by ID
-router.get('/tools/:toolId', requireAdmin, async (req, res) => {
+router.get('/tools/:toolId', requireAdmin, validateInput.toolId, async (req, res) => {
   try {
     const { toolId } = req.params;
     const tool = toolsService.getToolConfig(toolId);
@@ -419,7 +575,7 @@ router.get('/tools/:toolId', requireAdmin, async (req, res) => {
 });
 
 // Enable/disable tool
-router.put('/tools/:toolId/enabled', requireAdmin, async (req, res) => {
+router.put('/tools/:toolId/enabled', requireAdmin, validateInput.toolId, async (req, res) => {
   try {
     const { toolId } = req.params;
     const { enabled } = req.body;
@@ -451,7 +607,7 @@ router.put('/tools/:toolId/enabled', requireAdmin, async (req, res) => {
 });
 
 // Update tool configuration
-router.put('/tools/:toolId', requireAdmin, async (req, res) => {
+router.put('/tools/:toolId', requireAdmin, validateInput.toolId, async (req, res) => {
   try {
     const { toolId } = req.params;
     const updates = req.body;
