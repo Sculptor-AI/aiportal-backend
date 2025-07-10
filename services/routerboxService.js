@@ -14,6 +14,62 @@ import axios from 'axios';
  */
 export class RouterboxService {
   
+  /**
+   * Extract text content from message content (handles both string and array formats)
+   * @param {string|Array} content - The message content
+   * @returns {string} - The extracted text content
+   */
+  static extractTextFromContent(content) {
+    if (typeof content === 'string') {
+      return content;
+    }
+    
+    if (Array.isArray(content)) {
+      const textPart = content.find(part => part.type === 'text');
+      return textPart?.text || '';
+    }
+    
+    return '';
+  }
+  
+  /**
+   * Extract image data from message content array
+   * @param {Array} content - The message content array
+   * @returns {Object|null} - The extracted image data or null
+   */
+  static extractImageFromContent(content) {
+    if (!Array.isArray(content)) {
+      return null;
+    }
+    
+    const imagePart = content.find(part => part.type === 'image_url' || part.type === 'image');
+    if (!imagePart) {
+      return null;
+    }
+    
+    // Handle OpenAI format (image_url)
+    if (imagePart.type === 'image_url' && imagePart.image_url?.url) {
+      const url = imagePart.image_url.url;
+      const match = url.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        return {
+          mediaType: match[1],
+          data: match[2]
+        };
+      }
+    }
+    
+    // Handle Anthropic format (image)
+    if (imagePart.type === 'image' && imagePart.source) {
+      return {
+        mediaType: imagePart.source.media_type,
+        data: imagePart.source.data
+      };
+    }
+    
+    return null;
+  }
+  
   static getProviderFromModel(modelId) {
     // First check if model is configured in model config system
     const modelConfig = modelConfigService.getModelConfig(modelId);
@@ -87,8 +143,13 @@ export class RouterboxService {
   static async handleAnthropicRequest(model, messages, imageData, systemPrompt, streaming) {
     // Convert messages format to what Anthropic service expects
     const lastMessage = messages[messages.length - 1];
-    const prompt = lastMessage?.content || '';
+    const prompt = this.extractTextFromContent(lastMessage?.content) || '';
     const conversationHistory = messages.slice(0, -1);
+    
+    // Extract imageData from message content if not already provided
+    if (!imageData && lastMessage?.content) {
+      imageData = this.extractImageFromContent(lastMessage.content);
+    }
 
     if (streaming) {
       throw new Error('Streaming not supported in this context for Anthropic');
@@ -100,8 +161,13 @@ export class RouterboxService {
   static async handleOpenAIRequest(model, messages, imageData, systemPrompt, streaming) {
     // Convert messages format to what OpenAI service expects
     const lastMessage = messages[messages.length - 1];
-    const prompt = lastMessage?.content || '';
+    const prompt = this.extractTextFromContent(lastMessage?.content) || '';
     const conversationHistory = messages.slice(0, -1);
+    
+    // Extract imageData from message content if not already provided
+    if (!imageData && lastMessage?.content) {
+      imageData = this.extractImageFromContent(lastMessage.content);
+    }
 
     if (streaming) {
       throw new Error('Streaming not supported in this context for OpenAI');
@@ -119,8 +185,13 @@ export class RouterboxService {
   static async handleGeminiRequest(model, messages, imageData, systemPrompt, streaming) {
     // Convert messages format to what Gemini service expects
     const lastMessage = messages[messages.length - 1];
-    const prompt = lastMessage?.content || '';
+    const prompt = this.extractTextFromContent(lastMessage?.content) || '';
     const conversationHistory = messages.slice(0, -1);
+    
+    // Extract imageData from message content if not already provided
+    if (!imageData && lastMessage?.content) {
+      imageData = this.extractImageFromContent(lastMessage.content);
+    }
 
     if (streaming) {
       throw new Error('Streaming not supported in this context for Gemini');
@@ -132,8 +203,13 @@ export class RouterboxService {
   static async handleOllamaRequest(model, messages, imageData, systemPrompt, streaming) {
     // Convert messages format to what Ollama service expects
     const lastMessage = messages[messages.length - 1];
-    const prompt = lastMessage?.content || '';
+    const prompt = this.extractTextFromContent(lastMessage?.content) || '';
     const conversationHistory = messages.slice(0, -1);
+    
+    // Extract imageData from message content if not already provided
+    if (!imageData && lastMessage?.content) {
+      imageData = this.extractImageFromContent(lastMessage.content);
+    }
 
     if (streaming) {
       throw new Error('Streaming not supported in this context for Ollama');
@@ -145,8 +221,13 @@ export class RouterboxService {
   static async handleLocalRequest(model, messages, imageData, systemPrompt, streaming) {
     // Convert messages format to what Local service expects
     const lastMessage = messages[messages.length - 1];
-    const prompt = lastMessage?.content || '';
+    const prompt = this.extractTextFromContent(lastMessage?.content) || '';
     const conversationHistory = messages.slice(0, -1);
+    
+    // Extract imageData from message content if not already provided
+    if (!imageData && lastMessage?.content) {
+      imageData = this.extractImageFromContent(lastMessage.content);
+    }
 
     if (streaming) {
       throw new Error('Streaming not supported in this context for Local models');
@@ -235,8 +316,12 @@ export class RouterboxService {
         
       case 'anthropic':
         const lastMessage = messages[messages.length - 1];
-        const prompt = lastMessage?.content || '';
+        const prompt = this.extractTextFromContent(lastMessage?.content) || '';
         const conversationHistory = messages.slice(0, -1);
+        // Extract imageData from message content if not already provided
+        if (!imageData && lastMessage?.content) {
+          imageData = this.extractImageFromContent(lastMessage.content);
+        }
         return await streamAnthropicChat(model, prompt, imageData, systemPrompt, writeCallback, conversationHistory);
         
       case 'openai':
@@ -244,33 +329,53 @@ export class RouterboxService {
         const modelConfig = modelConfigService.getModelConfig(model);
         if (modelConfig && modelConfig.routing && modelConfig.routing.service === 'openai' && modelConfig.routing.endpoint) {
           const lastMessageOpenAI = messages[messages.length - 1];
-          const promptOpenAI = lastMessageOpenAI?.content || '';
+          const promptOpenAI = this.extractTextFromContent(lastMessageOpenAI?.content) || '';
           const conversationHistoryOpenAI = messages.slice(0, -1);
+          // Extract imageData from message content if not already provided
+          if (!imageData && lastMessageOpenAI?.content) {
+            imageData = this.extractImageFromContent(lastMessageOpenAI.content);
+          }
           return await streamOpenAICompatibleChat(model, promptOpenAI, imageData, systemPrompt, writeCallback, conversationHistoryOpenAI, modelConfig, false);
         } else {
           const lastMessageOpenAI = messages[messages.length - 1];
-          const promptOpenAI = lastMessageOpenAI?.content || '';
+          const promptOpenAI = this.extractTextFromContent(lastMessageOpenAI?.content) || '';
           const conversationHistoryOpenAI = messages.slice(0, -1);
+          // Extract imageData from message content if not already provided
+          if (!imageData && lastMessageOpenAI?.content) {
+            imageData = this.extractImageFromContent(lastMessageOpenAI.content);
+          }
           return await streamOpenAIChat(model, promptOpenAI, imageData, systemPrompt, writeCallback, conversationHistoryOpenAI, false);
         }
         
       case 'gemini':
         const lastMessageGemini = messages[messages.length - 1];
-        const promptGemini = lastMessageGemini?.content || '';
+        const promptGemini = this.extractTextFromContent(lastMessageGemini?.content) || '';
         const conversationHistoryGemini = messages.slice(0, -1);
+        // Extract imageData from message content if not already provided
+        if (!imageData && lastMessageGemini?.content) {
+          imageData = this.extractImageFromContent(lastMessageGemini.content);
+        }
         return await streamGeminiChat(model, promptGemini, imageData, systemPrompt, writeCallback, conversationHistoryGemini);
         
       case 'ollama':
         const lastMessageOllama = messages[messages.length - 1];
-        const promptOllama = lastMessageOllama?.content || '';
+        const promptOllama = this.extractTextFromContent(lastMessageOllama?.content) || '';
         const conversationHistoryOllama = messages.slice(0, -1);
+        // Extract imageData from message content if not already provided
+        if (!imageData && lastMessageOllama?.content) {
+          imageData = this.extractImageFromContent(lastMessageOllama.content);
+        }
         return await streamOllamaChat(model, promptOllama, imageData, systemPrompt, writeCallback, conversationHistoryOllama);
         
       case 'local':
       case 'localInference':
         const lastMessageLocal = messages[messages.length - 1];
-        const promptLocal = lastMessageLocal?.content || '';
+        const promptLocal = this.extractTextFromContent(lastMessageLocal?.content) || '';
         const conversationHistoryLocal = messages.slice(0, -1);
+        // Extract imageData from message content if not already provided
+        if (!imageData && lastMessageLocal?.content) {
+          imageData = this.extractImageFromContent(lastMessageLocal.content);
+        }
         return await streamLocalChat(model, promptLocal, imageData, systemPrompt, writeCallback, conversationHistoryLocal);
         
       case 'openrouter':
@@ -340,7 +445,7 @@ export class RouterboxService {
       
       // Extract the search query from the last message if not provided
       const lastMessage = messages[messages.length - 1];
-      const userQuery = searchQuery || lastMessage?.content || '';
+      const userQuery = searchQuery || this.extractTextFromContent(lastMessage?.content) || '';
       
       if (!userQuery) {
         throw new Error('No search query provided');
@@ -431,7 +536,7 @@ Please answer the user's query based on the search results above.`;
       
       // Extract the search query from the last message if not provided
       const lastMessage = messages[messages.length - 1];
-      const userQuery = searchQuery || lastMessage?.content || '';
+      const userQuery = searchQuery || this.extractTextFromContent(lastMessage?.content) || '';
       
       if (!userQuery) {
         throw new Error('No search query provided');
