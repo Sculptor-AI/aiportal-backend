@@ -14,6 +14,11 @@ class LiveAudioService {
     this.activeSessions = new Map();
     this.ai = new GoogleGenAI({});
     this.ensureAudioDirectory();
+    
+    // Rate limiting for DoS protection
+    this.rateLimitMap = new Map(); // sessionId -> { count, lastReset }
+    this.MAX_REQUESTS_PER_MINUTE = 60;
+    this.MAX_CONCURRENT_SESSIONS = 10;
   }
 
   ensureAudioDirectory() {
@@ -22,8 +27,33 @@ class LiveAudioService {
     }
   }
 
+  checkRateLimit(sessionId) {
+    const now = Date.now();
+    const rateLimit = this.rateLimitMap.get(sessionId) || { count: 0, lastReset: now };
+    
+    // Reset counter if a minute has passed
+    if (now - rateLimit.lastReset > 60000) {
+      rateLimit.count = 0;
+      rateLimit.lastReset = now;
+    }
+    
+    // Check if rate limit exceeded
+    if (rateLimit.count >= this.MAX_REQUESTS_PER_MINUTE) {
+      throw new Error('Rate limit exceeded. Please wait before making more requests.');
+    }
+    
+    // Increment counter
+    rateLimit.count++;
+    this.rateLimitMap.set(sessionId, rateLimit);
+  }
+
   async startSession(sessionId, options = {}) {
     try {
+      // Check for too many concurrent sessions
+      if (this.activeSessions.size >= this.MAX_CONCURRENT_SESSIONS) {
+        throw new Error('Too many concurrent sessions. Please try again later.');
+      }
+      
       const {
         model = 'gemini-live-2.5-flash-preview',
         responseModality = 'text', // 'text' or 'audio'
@@ -129,6 +159,9 @@ class LiveAudioService {
 
   async processAudioChunk(sessionId, audioData, options = {}) {
     try {
+      // Apply rate limiting
+      this.checkRateLimit(sessionId);
+      
       const sessionData = this.activeSessions.get(sessionId);
       if (!sessionData) {
         throw new Error(`Session ${sessionId} not found or expired`);
@@ -226,8 +259,23 @@ class LiveAudioService {
 
   async processAudioData(audioData, format, sampleRate) {
     try {
+      // Security: Validate input size to prevent DoS attacks
+      if (!audioData || audioData.length === 0) {
+        throw new Error('Invalid audio data');
+      }
+      
+      // Limit base64 string size to prevent memory exhaustion (5MB limit)
+      if (audioData.length > 5 * 1024 * 1024 * 4/3) { // Base64 is ~4/3 original size
+        throw new Error('Audio data too large (max 5MB)');
+      }
+      
       // Convert base64 to buffer
       const audioBuffer = Buffer.from(audioData, 'base64');
+      
+      // Additional security: limit buffer size
+      if (audioBuffer.length > 5 * 1024 * 1024) { // 5MB limit
+        throw new Error('Audio buffer too large (max 5MB)');
+      }
       
       // Use wavefile to convert to the correct format
       const wav = new WaveFile();
@@ -290,11 +338,27 @@ class LiveAudioService {
     }
   }
 
+  // Sanitize filename to prevent path traversal
+  sanitizeFilename(filename) {
+    // Remove all characters except alphanumeric, hyphens, underscores, and dots
+    return filename.replace(/[^a-zA-Z0-9._-]/g, '');
+  }
+
   async saveAudioChunk(audioData, sessionId, format) {
     try {
       const timestamp = Date.now();
-      const filename = `audio_${sessionId}_${timestamp}.${format}`;
+      const sanitizedSessionId = this.sanitizeFilename(sessionId);
+      const sanitizedFormat = this.sanitizeFilename(format);
+      const filename = `audio_${sanitizedSessionId}_${timestamp}.${sanitizedFormat}`;
       const filepath = path.join(this.audioDir, filename);
+
+      // Additional security check: ensure the final path is still within audioDir
+      const resolvedPath = path.resolve(filepath);
+      const resolvedAudioDir = path.resolve(this.audioDir);
+      
+      if (!resolvedPath.startsWith(resolvedAudioDir)) {
+        throw new Error('Invalid file path detected');
+      }
 
       // Convert base64 to buffer and save
       const buffer = Buffer.from(audioData, 'base64');

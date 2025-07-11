@@ -1,78 +1,48 @@
-import fs from 'fs';
-import path from 'path';
 import crypto from 'crypto';
-import { fileURLToPath } from 'url';
 import database from '../database/connection.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const ADMIN_USERS_FILE = path.join(__dirname, 'admin-users.json');
 const ADMIN_TOKEN_EXPIRES_HOURS = 24;
 
 export class AdminService {
   
-  static async loadAdminUsers() {
-    try {
-      const data = await fs.promises.readFile(ADMIN_USERS_FILE, 'utf8');
-      return JSON.parse(data);
-    } catch (error) {
-      console.error('Error loading admin users:', error);
-      return { admins: [] };
-    }
-  }
-
-  static async saveAdminUsers(adminData) {
-    try {
-      await fs.promises.writeFile(ADMIN_USERS_FILE, JSON.stringify(adminData, null, 2));
-    } catch (error) {
-      console.error('Error saving admin users:', error);
-      throw new Error('Failed to save admin users');
-    }
-  }
-
   static async isUserAdmin(userId) {
-    const adminData = await this.loadAdminUsers();
-    return adminData.admins.some(admin => admin.userId === parseInt(userId));
+    try {
+      const user = await database.get('SELECT status FROM users WHERE id = ? AND is_active = 1', [userId]);
+      return user && user.status === 'admin';
+    } catch (error) {
+      console.error('Error checking admin status:', error);
+      return false;
+    }
   }
 
   static async addAdmin(userId, addedBy) {
-    const adminData = await this.loadAdminUsers();
-    
-    // Check if user is already an admin
-    if (adminData.admins.some(admin => admin.userId === userId)) {
-      throw new Error('User is already an admin');
-    }
-
-    // Get user info
-    const user = await database.get('SELECT username FROM users WHERE id = ?', [userId]);
+    // Check if user exists and is not already an admin
+    const user = await database.get('SELECT username, status FROM users WHERE id = ? AND is_active = 1', [userId]);
     if (!user) {
       throw new Error('User not found');
     }
-
-    // Add to admin list
-    adminData.admins.push({
-      userId: userId,
-      username: user.username,
-      addedAt: new Date().toISOString(),
-      addedBy: addedBy
-    });
-
-    await this.saveAdminUsers(adminData);
+    
+    if (user.status === 'admin') {
+      throw new Error('User is already an admin');
+    }
 
     // Update user status in database
-    await database.run('UPDATE users SET status = ? WHERE id = ?', ['admin', userId]);
+    await database.run('UPDATE users SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', ['admin', userId]);
   }
 
   static async removeAdmin(userId) {
-    const adminData = await this.loadAdminUsers();
+    // Check if user exists and is an admin
+    const user = await database.get('SELECT username, status FROM users WHERE id = ? AND is_active = 1', [userId]);
+    if (!user) {
+      throw new Error('User not found');
+    }
     
-    // Remove from admin list
-    adminData.admins = adminData.admins.filter(admin => admin.userId !== userId);
-    await this.saveAdminUsers(adminData);
+    if (user.status !== 'admin') {
+      throw new Error('User is not an admin');
+    }
 
     // Update user status in database
-    await database.run('UPDATE users SET status = ? WHERE id = ?', ['active', userId]);
+    await database.run('UPDATE users SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', ['active', userId]);
   }
 
   static async generateAdminToken(userId) {
@@ -147,31 +117,13 @@ export class AdminService {
       throw new Error('Invalid status');
     }
 
-    await database.run('UPDATE users SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [newStatus, userId]);
+    // Check if user exists
+    const user = await database.get('SELECT id FROM users WHERE id = ? AND is_active = 1', [userId]);
+    if (!user) {
+      throw new Error('User not found');
+    }
 
-    // If setting to admin, add to admin list
-    if (newStatus === 'admin') {
-      const adminData = await this.loadAdminUsers();
-      if (!adminData.admins.some(admin => admin.userId === parseInt(userId))) {
-        const user = await database.get('SELECT username FROM users WHERE id = ?', [userId]);
-        adminData.admins.push({
-          userId: parseInt(userId),
-          username: user.username,
-          addedAt: new Date().toISOString(),
-          addedBy: 'admin'
-        });
-        await this.saveAdminUsers(adminData);
-      }
-    }
-    // If removing from admin, remove from admin list
-    else if (newStatus !== 'admin') {
-      const adminData = await this.loadAdminUsers();
-      const wasAdmin = adminData.admins.some(admin => admin.userId === parseInt(userId));
-      if (wasAdmin) {
-        adminData.admins = adminData.admins.filter(admin => admin.userId !== parseInt(userId));
-        await this.saveAdminUsers(adminData);
-      }
-    }
+    await database.run('UPDATE users SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [newStatus, userId]);
   }
 
   static async updateUserDetails(userId, updates) {

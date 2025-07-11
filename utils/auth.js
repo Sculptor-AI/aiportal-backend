@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import database from '../database/connection.js';
 
-const JWT_SECRET = (() => {
+const getJWTSecret = () => {
   if (!process.env.JWT_SECRET) {
     throw new Error('JWT_SECRET environment variable is required and must be set');
   }
@@ -11,7 +11,7 @@ const JWT_SECRET = (() => {
     throw new Error('JWT_SECRET must be at least 32 characters long');
   }
   return process.env.JWT_SECRET;
-})();
+};
 const JWT_EXPIRES_IN = '7d';
 const REFRESH_TOKEN_EXPIRES_DAYS = 30;
 const SALT_ROUNDS = 12;
@@ -71,7 +71,7 @@ export class AuthService {
   static generateAccessToken(userId, username) {
     return jwt.sign(
       { userId, username, type: 'access' },
-      JWT_SECRET,
+      getJWTSecret(),
       { expiresIn: JWT_EXPIRES_IN }
     );
   }
@@ -82,7 +82,7 @@ export class AuthService {
 
   static async verifyAccessToken(token) {
     try {
-      const decoded = jwt.verify(token, JWT_SECRET);
+      const decoded = jwt.verify(token, getJWTSecret());
       if (decoded.type !== 'access') {
         throw new Error('Invalid token type');
       }

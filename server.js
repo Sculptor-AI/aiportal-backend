@@ -40,12 +40,23 @@ const PORT = process.env.PORT || 3000;
 // Trust Cloudflare proxy - must be set before rate limiting middleware
 app.set('trust proxy', true);
 
-// CORS disabled - allow all origins
+// CORS configuration with secure origin allowlist
 const corsOptions = {
-  origin: true, // Allow all origins
+  origin: (origin, callback) => {
+    const allowedOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : [];
+    // Allow requests with no origin (like mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log(`CORS blocked origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD', 'PATCH'],
-  allowedHeaders: ['*'], // Allow all headers
-  exposedHeaders: ['*'], // Expose all headers
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
   credentials: true,
   preflightContinue: false,
   optionsSuccessStatus: 200
@@ -95,10 +106,16 @@ app.use(cors(corsOptions));
 
 // Additional CORS middleware to handle any edge cases
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  const allowedOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : [];
+  const origin = req.headers.origin;
+  
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
+  
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH');
-  res.header('Access-Control-Allow-Headers', '*');
-  res.header('Access-Control-Expose-Headers', '*');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token');
+  res.header('Access-Control-Expose-Headers', 'Content-Range, X-Content-Range');
   res.header('Access-Control-Allow-Credentials', 'true');
   
   if (req.method === 'OPTIONS') {

@@ -1,6 +1,6 @@
 import RSSParser from 'rss-parser';
 import axios from 'axios';
-import cheerio from 'cheerio';
+import * as cheerio from 'cheerio';
 
 const parser = new RSSParser({
   customFields: {
