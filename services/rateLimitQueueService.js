@@ -6,8 +6,10 @@ class RateLimitQueueService extends EventEmitter {
         super();
         this.globalQueues = new Map(); // modelId -> queue
         this.userQueues = new Map();   // userId:modelId -> queue
+        this.ipQueues = new Map();     // ip:modelId -> queue
         this.globalCounters = new Map(); // modelId -> { count, resetTime }
         this.userCounters = new Map();   // userId:modelId -> { count, resetTime }
+        this.ipCounters = new Map();     // ip:modelId -> { count, resetTime }
         this.processing = new Set();
         this.initialized = false;
     }
@@ -23,7 +25,7 @@ class RateLimitQueueService extends EventEmitter {
     }
 
     // Check if request can proceed or needs to be queued
-    async checkRateLimit(userId, modelId) {
+    async checkRateLimit(userId, modelId, ipAddress = null) {
         if (!modelConfigService.isRateLimitingEnabled()) {
             return { allowed: true, queued: false };
         }
@@ -38,9 +40,19 @@ class RateLimitQueueService extends EventEmitter {
         const userKey = `${userId}:${modelId}`;
         const userAllowed = this.checkUserLimit(userKey, userLimit);
 
-        if (globalAllowed && userAllowed) {
-            // Both limits allow the request
-            this.incrementCounters(modelId, userKey);
+        // Check IP rate limit (if IP provided)
+        let ipAllowed = true;
+        let ipKey = null;
+        if (ipAddress) {
+            ipKey = `${ipAddress}:${modelId}`;
+            // Default IP rate limit (stricter than user limits)
+            const ipLimit = { requests: 50, window: 'hour' };
+            ipAllowed = this.checkIpLimit(ipKey, ipLimit);
+        }
+
+        if (globalAllowed && userAllowed && ipAllowed) {
+            // All limits allow the request
+            this.incrementCounters(modelId, userKey, ipKey);
             return { allowed: true, queued: false };
         }
 
@@ -58,7 +70,7 @@ class RateLimitQueueService extends EventEmitter {
         }
 
         // Add to queue
-        return await this.queueRequest(userId, modelId, globalAllowed, userAllowed);
+        return await this.queueRequest(userId, modelId, globalAllowed, userAllowed, ipAllowed);
     }
 
     checkGlobalLimit(modelId, limit) {
@@ -96,7 +108,24 @@ class RateLimitQueueService extends EventEmitter {
         return counter.count < limit.requests;
     }
 
-    incrementCounters(modelId, userKey) {
+    checkIpLimit(ipKey, limit) {
+        const counter = this.ipCounters.get(ipKey);
+        const windowMs = modelConfigService.getWindowDurationMs(limit.window);
+        const now = Date.now();
+
+        if (!counter || now >= counter.resetTime) {
+            // Reset or initialize counter
+            this.ipCounters.set(ipKey, {
+                count: 0,
+                resetTime: now + windowMs
+            });
+            return true;
+        }
+
+        return counter.count < limit.requests;
+    }
+
+    incrementCounters(modelId, userKey, ipKey = null) {
         // Increment global counter
         const globalCounter = this.globalCounters.get(modelId);
         if (globalCounter) {
@@ -108,9 +137,17 @@ class RateLimitQueueService extends EventEmitter {
         if (userCounter) {
             userCounter.count++;
         }
+
+        // Increment IP counter if provided
+        if (ipKey) {
+            const ipCounter = this.ipCounters.get(ipKey);
+            if (ipCounter) {
+                ipCounter.count++;
+            }
+        }
     }
 
-    async queueRequest(userId, modelId, globalAllowed, userAllowed) {
+    async queueRequest(userId, modelId, globalAllowed, userAllowed, ipAllowed = true) {
         const queueConfig = modelConfigService.getQueueConfig();
         
         // Determine which queue to use

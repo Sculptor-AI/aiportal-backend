@@ -1,6 +1,67 @@
 import axios from 'axios';
 import cheerio from 'cheerio';
 import { formatError } from '../utils/formatters.js';
+import { URL } from 'url';
+
+/**
+ * Validate URL to prevent SSRF attacks
+ * @param {string} url - URL to validate
+ * @returns {boolean} - Whether URL is safe
+ */
+function isValidUrl(url) {
+  try {
+    const parsedUrl = new URL(url);
+    
+    // Only allow HTTP and HTTPS protocols
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      return false;
+    }
+    
+    // Block internal IP ranges
+    const hostname = parsedUrl.hostname;
+    
+    // Block localhost variations
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+      return false;
+    }
+    
+    // Block private IP ranges
+    const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (ipv4Regex.test(hostname)) {
+      const parts = hostname.split('.').map(Number);
+      
+      // 10.0.0.0/8
+      if (parts[0] === 10) return false;
+      
+      // 172.16.0.0/12
+      if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return false;
+      
+      // 192.168.0.0/16
+      if (parts[0] === 192 && parts[1] === 168) return false;
+      
+      // 169.254.0.0/16 (link-local)
+      if (parts[0] === 169 && parts[1] === 254) return false;
+    }
+    
+    // Block IPv6 local addresses
+    if (hostname.startsWith('::1') || hostname.startsWith('fe80:') || hostname.startsWith('fc00:') || hostname.startsWith('fd00:')) {
+      return false;
+    }
+    
+    // Block common internal domains
+    const blockedDomains = [
+      'internal', 'local', 'intranet', 'corp', 'lan'
+    ];
+    
+    if (blockedDomains.some(domain => hostname.includes(domain))) {
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
 
 /**
  * Perform a search using Brave Search API
@@ -65,6 +126,11 @@ export const scrapeUrl = async (req, res) => {
     
     if (!url || typeof url !== 'string') {
       return res.status(400).json(formatError('URL is required and must be a string'));
+    }
+    
+    // Validate URL to prevent SSRF attacks
+    if (!isValidUrl(url)) {
+      return res.status(400).json(formatError('Invalid or blocked URL'));
     }
     
     console.log(`Attempting to scrape URL: ${url}`);

@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import modelConfigService from './modelConfigService.js';
+import { sanitizeErrorMessage, safeConsoleLog } from '../utils/errorSanitizer.js';
 
 /**
  * Initialize Gemini client
@@ -8,7 +9,7 @@ const initializeGeminiClient = () => {
   const apiKey = process.env.GEMINI_API_KEY;
   
   if (!apiKey) {
-    console.warn("GEMINI_API_KEY is not configured in environment variables");
+    safeConsoleLog('warn', "GEMINI_API_KEY is not configured in environment variables");
     return null;
   }
   
@@ -269,7 +270,7 @@ export const processGeminiChat = async (modelType, prompt, imageData = null, sys
       };
     }
   } catch (error) {
-    console.error('Error in Gemini chat processing:', error);
+    safeConsoleLog('error', 'Error in Gemini chat processing:', error);
     throw error;
   }
 };
@@ -430,7 +431,7 @@ export const streamGeminiChat = async (modelType, prompt, imageData = null, syst
     }
     
   } catch (error) {
-    console.error('Error in Gemini streaming:', error);
+    safeConsoleLog('error', 'Error in Gemini streaming:', error);
     throw error;
   }
 };
@@ -483,7 +484,7 @@ export const processGroundedSearch = async (modelType, query) => {
       }
     };
   } catch (error) {
-    console.error('Error in grounded search:', error);
+    safeConsoleLog('error', 'Error in grounded search:', error);
     throw error;
   }
 };

@@ -89,6 +89,32 @@ export class LocalInferenceService {
   }
 
   /**
+   * Validate model path to prevent command injection
+   */
+  validateModelPath(modelPath) {
+    // Resolve the path to check if it's within the allowed models directory
+    const resolvedPath = path.resolve(modelPath);
+    const allowedModelsPath = path.resolve(this.modelsPath);
+    
+    // Check if the resolved path is within the models directory
+    if (!resolvedPath.startsWith(allowedModelsPath)) {
+      throw new Error('Model path is not within the allowed models directory');
+    }
+    
+    // Check if the file exists and is a regular file
+    if (!fs.existsSync(resolvedPath) || !fs.statSync(resolvedPath).isFile()) {
+      throw new Error('Model file does not exist or is not a valid file');
+    }
+    
+    // Check if the file has a valid .gguf extension
+    if (!resolvedPath.endsWith('.gguf')) {
+      throw new Error('Model file must have .gguf extension');
+    }
+    
+    return resolvedPath;
+  }
+
+  /**
    * Start a model server if not already running
    */
   async startModelServer(modelName) {
@@ -141,11 +167,14 @@ export class LocalInferenceService {
       throw new Error(`Model ${cleanModelName} not found. Available models: ${models.map(m => m.name).join(', ')}`);
     }
 
+    // Validate model path to prevent command injection
+    const validatedModelPath = this.validateModelPath(model.modelPath);
+    
     const port = this.basePort + this.runningServers.size;
     
     return new Promise((resolve, reject) => {
       const serverProcess = spawn(this.llamaCppPath, [
-        '-m', model.modelPath,
+        '-m', validatedModelPath,
         '--port', port.toString(),
         '--host', '127.0.0.1',
         '-c', '4096', // Context length

@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import modelConfigService from './modelConfigService.js';
+import { sanitizeErrorMessage, safeConsoleLog } from '../utils/errorSanitizer.js';
 
 /**
  * Initialize Anthropic client
@@ -144,7 +145,7 @@ export const processAnthropicChat = async (modelType, prompt, imageData = null, 
         } catch (error) {
           console.log(`❌ TOOL ERROR: ${toolUse.name}`);
           console.log(`📝 Parameters:`, JSON.stringify(toolUse.input || {}, null, 2));
-          console.log(`💥 Error:`, error.message);
+          console.log(`💥 Error:`, sanitizeErrorMessage(error));
           console.log(`─────────────────────────────────────────\n`);
           
           console.error(`Error executing tool ${toolUse.name}:`, error);
@@ -221,7 +222,7 @@ export const processAnthropicChat = async (modelType, prompt, imageData = null, 
       }
     };
   } catch (error) {
-    console.error('Error in Anthropic chat processing:', error);
+    safeConsoleLog('error', 'Error in Anthropic chat processing:', error);
     throw error;
   }
 };
@@ -372,7 +373,7 @@ export const streamAnthropicChat = async (modelType, prompt, imageData = null, s
             } catch (error) {
               console.log(`❌ TOOL ERROR: ${toolUse.name}`);
               console.log(`📝 Parameters:`, JSON.stringify(toolUse.input || {}, null, 2));
-              console.log(`💥 Error:`, error.message);
+              console.log(`💥 Error:`, sanitizeErrorMessage(error));
               console.log(`─────────────────────────────────────────\n`);
               
               console.error(`Error executing tool ${toolUse.name}:`, error);
@@ -442,7 +443,7 @@ export const streamAnthropicChat = async (modelType, prompt, imageData = null, s
     }
     
   } catch (error) {
-    console.error('Error in Anthropic streaming:', error);
+    safeConsoleLog('error', 'Error in Anthropic streaming:', error);
     throw error;
   }
 };

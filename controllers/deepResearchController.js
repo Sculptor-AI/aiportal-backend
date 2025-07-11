@@ -1,4 +1,5 @@
 import geminiService from '../services/geminiService.js';
+import { safeConsoleLog, sanitizeErrorMessage } from '../utils/errorSanitizer.js';
 
 /**
  * Deep Research API Controller
@@ -62,7 +63,7 @@ Ensure the JSON is valid and the sub-questions are diverse and comprehensive to 
         subQuestions = taskResult.subQuestions || [];
         researchApproach = taskResult.researchApproach || '';
       } catch (parseError) {
-        console.error('Error parsing task decomposition:', parseError);
+        safeConsoleLog('error', 'Error parsing task decomposition:', parseError);
         // Fallback: create basic sub-questions
         subQuestions = [
           `What is the current state of: ${query}?`,
@@ -104,7 +105,7 @@ Be thorough but focused on this specific sub-question.`;
             agentId: index + 1
           };
         } catch (error) {
-          console.error(`Error in agent ${index + 1}:`, error);
+          safeConsoleLog('error', `Error in agent ${index + 1}:`, error);
           return {
             subQuestion,
             response: `Error conducting research for this sub-question: ${error.message}`,
@@ -224,7 +225,7 @@ Structure your response as a well-organized report with clear sections and heade
       res.write(`data: [DONE]\n\n`);
       
     } catch (error) {
-      console.error('Error in deep research process:', error);
+      safeConsoleLog('error', 'Error in deep research process:', error);
       res.write(`data: ${JSON.stringify({ 
         type: 'error', 
         message: 'An error occurred during deep research: ' + error.message 
@@ -235,7 +236,7 @@ Structure your response as a well-organized report with clear sections and heade
     res.end();
     
   } catch (error) {
-    console.error('Error in deep research endpoint:', error);
+    safeConsoleLog('error', 'Error in deep research endpoint:', error);
     if (!res.headersSent) {
       res.status(500).json({ error: 'Internal server error during deep research' });
     }

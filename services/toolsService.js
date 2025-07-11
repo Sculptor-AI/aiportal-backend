@@ -1,4 +1,5 @@
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 import chokidar from 'chokidar';
@@ -390,11 +391,40 @@ class ToolsService {
         }
     }
 
+    /**
+     * Validate controller path to prevent command injection
+     */
+    validateControllerPath(controllerPath) {
+        // Resolve the path to check if it's within the allowed tools directory
+        const resolvedPath = path.resolve(controllerPath);
+        const allowedToolsPath = path.resolve(this.toolsPath);
+        
+        // Check if the resolved path is within the tools directory
+        if (!resolvedPath.startsWith(allowedToolsPath)) {
+            throw new Error('Controller path is not within the allowed tools directory');
+        }
+        
+        // Check if the file exists and is a regular file
+        if (!fsSync.existsSync(resolvedPath) || !fsSync.statSync(resolvedPath).isFile()) {
+            throw new Error('Controller file does not exist or is not a valid file');
+        }
+        
+        // Check if the file has a valid .py extension
+        if (!resolvedPath.endsWith('.py')) {
+            throw new Error('Controller file must have .py extension');
+        }
+        
+        return resolvedPath;
+    }
+
     async executeToolController(config, parameters, executionId) {
         return new Promise((resolve, reject) => {
             const timeout = config.maxExecutionTime || this.globalConfig.globalSettings.toolExecutionTimeout;
             
-            const child = spawn('python3', [config.controllerPath], {
+            // Validate controller path to prevent command injection
+            const validatedControllerPath = this.validateControllerPath(config.controllerPath);
+            
+            const child = spawn('python3', [validatedControllerPath], {
                 stdio: ['pipe', 'pipe', 'pipe'],
                 timeout: timeout
             });

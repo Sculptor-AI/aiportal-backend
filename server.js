@@ -24,9 +24,15 @@ import modelConfigService from './services/modelConfigService.js';
 import rateLimitQueueService from './services/rateLimitQueueService.js';
 import toolsService from './services/toolsService.js';
 import { handleWebSocketConnection, cleanupExpiredSessions } from './controllers/liveAudioController.js';
+import crypto from 'crypto';
 
 // Load environment variables
 dotenv.config();
+
+// Generate a random nonce for CSP
+function generateNonce() {
+  return crypto.randomBytes(16).toString('base64');
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -51,14 +57,19 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'"],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", "wss:", "ws:", "https:"],
-      fontSrc: ["'self'", "data:"],
+      fontSrc: ["'self'", "data:", "https:"],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
       frameSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'none'"],
+      upgradeInsecureRequests: [],
+      blockAllMixedContent: [],
     },
   },
   crossOriginResourcePolicy: { policy: "cross-origin" },
@@ -71,7 +82,12 @@ app.use(helmet({
   },
   noSniff: true,
   xssFilter: true,
-  referrerPolicy: { policy: "strict-origin-when-cross-origin" }
+  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  hidePoweredBy: true,
+  ieNoOpen: true,
+  originAgentCluster: true,
+  dnsPrefetchControl: true,
+  permittedCrossDomainPolicies: false
 }));
 
 // Enable CORS - this must come before other middleware
@@ -92,9 +108,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// Increase JSON body size limit to 50MB to handle base64 encoded images
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true })); // Also increase URL-encoded limit
+// JSON body size limit - reduced for security (25MB for base64 encoded images)
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ limit: '25mb', extended: true }));
 
 // Log requests for debugging
 app.use((req, res, next) => {

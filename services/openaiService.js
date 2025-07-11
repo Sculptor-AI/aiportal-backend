@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import modelConfigService from './modelConfigService.js';
+import { sanitizeErrorMessage, safeConsoleLog } from '../utils/errorSanitizer.js';
 
 /**
  * Initialize OpenAI client
@@ -180,7 +181,7 @@ export const processOpenAICompatibleChat = async (modelType, prompt, imageData =
               content: JSON.stringify(result)
             });
           } catch (error) {
-            console.error(`Error executing tool ${toolCall.function.name}:`, error);
+            safeConsoleLog('error', `Error executing tool ${toolCall.function.name}:`, error);
             toolResults.push({
               tool_call_id: toolCall.id,
               role: 'tool',
@@ -235,7 +236,7 @@ export const processOpenAICompatibleChat = async (modelType, prompt, imageData =
       }
     };
   } catch (error) {
-    console.error('Error in OpenAI-compatible chat processing:', error);
+    safeConsoleLog('error', 'Error in OpenAI-compatible chat processing:', error);
     throw error;
   }
 };
@@ -364,7 +365,7 @@ export const processOpenAIChat = async (modelType, prompt, imageData = null, sys
               content: JSON.stringify(result)
             });
           } catch (error) {
-            console.error(`Error executing tool ${toolCall.function.name}:`, error);
+            safeConsoleLog('error', `Error executing tool ${toolCall.function.name}:`, error);
             toolResults.push({
               tool_call_id: toolCall.id,
               role: 'tool',
@@ -419,7 +420,7 @@ export const processOpenAIChat = async (modelType, prompt, imageData = null, sys
       }
     };
   } catch (error) {
-    console.error('Error in OpenAI chat processing:', error);
+    safeConsoleLog('error', 'Error in OpenAI chat processing:', error);
     throw error;
   }
 };
@@ -633,7 +634,7 @@ export const streamOpenAICompatibleChat = async (modelType, prompt, imageData = 
                 console.log(`💥 Error:`, error.message);
                 console.log(`─────────────────────────────────────────\n`);
                 
-                console.error(`Error executing tool ${toolCall.function.name}:`, error);
+                safeConsoleLog('error', `Error executing tool ${toolCall.function.name}:`, error);
                 toolResults.push({
                   tool_call_id: toolCall.id,
                   role: 'tool',
@@ -703,7 +704,7 @@ export const streamOpenAICompatibleChat = async (modelType, prompt, imageData = 
     }
     
   } catch (error) {
-    console.error('Error in OpenAI-compatible streaming:', error);
+    safeConsoleLog('error', 'Error in OpenAI-compatible streaming:', error);
     throw error;
   }
 };
@@ -902,7 +903,7 @@ export const streamOpenAIChat = async (modelType, prompt, imageData = null, syst
                 console.log(`💥 Error:`, error.message);
                 console.log(`─────────────────────────────────────────\n`);
                 
-                console.error(`Error executing tool ${toolCall.function.name}:`, error);
+                safeConsoleLog('error', `Error executing tool ${toolCall.function.name}:`, error);
                 toolResults.push({
                   tool_call_id: toolCall.id,
                   role: 'tool',
@@ -972,7 +973,7 @@ export const streamOpenAIChat = async (modelType, prompt, imageData = null, syst
     }
     
   } catch (error) {
-    console.error('Error in OpenAI streaming:', error);
+    safeConsoleLog('error', 'Error in OpenAI streaming:', error);
     throw error;
   }
 };

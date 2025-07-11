@@ -244,7 +244,8 @@ export class CustomModelService {
   // Security helper methods
   static sanitizeFilename(filename) {
     // Remove any path traversal characters and other dangerous characters
-    return filename.replace(/[^a-zA-Z0-9._-]/g, '');
+    // Note: Periods are removed to prevent path traversal attacks
+    return filename.replace(/[^a-zA-Z0-9_-]/g, '');
   }
 
   static isPathSafe(filePath) {
@@ -253,7 +254,9 @@ export class CustomModelService {
     const resolvedCustomModelsPath = path.resolve(this.customModelsPath);
     
     // Check if the resolved path starts with the custom models directory
-    return resolvedPath.startsWith(resolvedCustomModelsPath + path.sep) || 
-           resolvedPath === resolvedCustomModelsPath;
+    // Must be within the directory and not equal to it (to prevent overwriting the directory)
+    return resolvedPath.startsWith(resolvedCustomModelsPath + path.sep) &&
+           resolvedPath !== resolvedCustomModelsPath &&
+           !resolvedPath.includes('..'); // Extra protection against path traversal
   }
 }

@@ -8,6 +8,8 @@ import { isLocalModel, processLocalChat, streamLocalChat } from '../services/loc
 import modelConfigService from '../services/modelConfigService.js';
 import toolsService from '../services/toolsService.js';
 import systemPromptService from '../services/systemPromptService.js';
+import { sanitizePrompt, sanitizeSystemPrompt, sanitizeMessages, validatePrompt } from '../utils/promptSanitizer.js';
+import { validateChatRequest } from '../utils/inputValidator.js';
 
 /**
  * Enhanced tool call manager for handling multiple concurrent tool calls
@@ -319,6 +321,12 @@ async function handleToolCall(chunk, modelType, writeStream, toolManager = null)
  */
 export const completeChat = async (req, res) => {
   try {
+    // Validate request body
+    const validation = validateChatRequest(req.body);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.message });
+    }
+    
     let { modelType, prompt, search = false, deepResearch = false, imageGen = false, imageData = null, mode, systemPrompt, messages = [] } = req.body;
     
     // Fix prompt structure when imageData is present
@@ -330,6 +338,22 @@ export const completeChat = async (req, res) => {
         prompt = String(prompt);
         req.body.prompt = prompt;
       }
+    }
+    
+    // Sanitize inputs to prevent prompt injection
+    if (prompt) {
+      if (!validatePrompt(prompt)) {
+        return res.status(400).json({ error: 'Invalid prompt detected' });
+      }
+      prompt = sanitizePrompt(prompt);
+    }
+    
+    if (systemPrompt) {
+      systemPrompt = sanitizeSystemPrompt(systemPrompt);
+    }
+    
+    if (messages && Array.isArray(messages)) {
+      messages = sanitizeMessages(messages);
     }
     
     // Log the request (without sensitive data)
@@ -619,10 +643,32 @@ export const completeChat = async (req, res) => {
  * @param {Object} res - Express response object
  */
 export const streamChat = async (req, res) => {
+  // Validate request body
+  const validation = validateChatRequest(req.body);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.message });
+  }
+  
   let { modelType, prompt, search, deepResearch, imageGen, imageData, fileTextContent, mode, systemPrompt, messages = [] } = req.body;
   
   if (!modelType || !prompt) {
     return res.status(400).json({ error: 'Missing required fields: modelType and prompt' });
+  }
+  
+  // Sanitize inputs to prevent prompt injection
+  if (prompt) {
+    if (!validatePrompt(prompt)) {
+      return res.status(400).json({ error: 'Invalid prompt detected' });
+    }
+    prompt = sanitizePrompt(prompt);
+  }
+  
+  if (systemPrompt) {
+    systemPrompt = sanitizeSystemPrompt(systemPrompt);
+  }
+  
+  if (messages && Array.isArray(messages)) {
+    messages = sanitizeMessages(messages);
   }
   
   console.log("Backend streamChat received:", { 
@@ -1170,10 +1216,32 @@ export const streamChat = async (req, res) => {
  * @param {Object} res - Express response object
  */
 export const handleChat = async (req, res) => {
-  const { modelType, prompt, search, deepResearch, imageGen, imageData, fileTextContent, mode, systemPrompt, messages = [] } = req.body;
+  // Validate request body
+  const validation = validateChatRequest(req.body);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.message });
+  }
+  
+  let { modelType, prompt, search, deepResearch, imageGen, imageData, fileTextContent, mode, systemPrompt, messages = [] } = req.body;
   
   if (!modelType || !prompt) {
     return res.status(400).json({ error: 'Missing required fields: modelType and prompt' });
+  }
+  
+  // Sanitize inputs to prevent prompt injection
+  if (prompt) {
+    if (!validatePrompt(prompt)) {
+      return res.status(400).json({ error: 'Invalid prompt detected' });
+    }
+    prompt = sanitizePrompt(prompt);
+  }
+  
+  if (systemPrompt) {
+    systemPrompt = sanitizeSystemPrompt(systemPrompt);
+  }
+  
+  if (messages && Array.isArray(messages)) {
+    messages = sanitizeMessages(messages);
   }
   
   console.log("Backend handleChat received:", { 

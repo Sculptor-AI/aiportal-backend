@@ -1,5 +1,6 @@
 import axios from 'axios';
 import cheerio from 'cheerio';
+import { sanitizeErrorMessage, safeConsoleLog } from '../utils/errorSanitizer.js';
 
 /**
  * Brave Search Service
@@ -46,8 +47,8 @@ export class BraveSearchService {
       return results;
       
     } catch (error) {
-      console.error('BraveSearchService error:', error);
-      throw new Error(`Failed to perform search: ${error.message}`);
+      safeConsoleLog('error', 'BraveSearchService error:', error);
+      throw new Error(`Failed to perform search: ${sanitizeErrorMessage(error)}`);
     }
   }
   

@@ -11,6 +11,11 @@ echo "🛑 Stopping any existing servers..."
 pkill -f "node server.js" 2>/dev/null || true
 sleep 2
 
+# Load environment variables from .env file
+if [ -f .env ]; then
+    export $(cat .env | grep -v '^#' | xargs)
+fi
+
 # Set environment variables for HTTP mode
 export NODE_ENV=production
 export PORT=3000

@@ -36,11 +36,15 @@ def emit_status(status, message=None, details=None):
     print(f"STATUS:{json.dumps(status_data)}", flush=True)
 
 # Security: Limit memory usage
-def set_memory_limit(memory_mb=128):
+def set_memory_limit(memory_mb=64):
     """Set memory limit for the process"""
     try:
         memory_bytes = memory_mb * 1024 * 1024
         resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
+        # Also limit CPU time
+        resource.setrlimit(resource.RLIMIT_CPU, (10, 10))  # 10 seconds CPU time limit
+        # Limit number of processes
+        resource.setrlimit(resource.RLIMIT_NPROC, (1, 1))  # Only current process
     except:
         pass
 
@@ -93,14 +97,16 @@ def validate_code(code):
     """Validate that code doesn't contain dangerous operations"""
     dangerous_patterns = [
         'import os', 'import sys', 'import subprocess', 'import socket',
-        'import urllib', 'import requests', 'import http',
+        'import urllib', 'import requests', 'import http', 'import shutil',
+        'import tempfile', 'import threading', 'import multiprocessing',
+        'import ctypes', 'import platform', 'import inspect',
         'open(', 'file(', 'exec(', 'eval(', 'compile(',
         '__import__', '__builtins__', '__globals__', '__locals__',
         'globals()', 'getattr(', 'setattr(', 'delattr(',
         'input(', 'raw_input(',
         'exit(', 'quit(', 'sys.exit',
         'os.', 'sys.', 'subprocess.', 'socket.',
-        'urllib.', 'requests.', 'http.',
+        'urllib.', 'requests.', 'http.', 'shutil.',
         '__file__', '__name__', '__doc__', '__package__',
         'reload(', 'importlib',
         'pickle', 'cPickle', 'marshal', 'shelve',
@@ -119,7 +125,23 @@ def validate_code(code):
         '+ "', "+ '", '" +', "' +",
         # Potential bypass patterns
         'getattr', 'setattr', 'delattr', 'hasattr',
-        'vars()', 'dir()', '__dict__'
+        'vars()', 'dir()', '__dict__',
+        # Additional dangerous operations
+        'with open', 'file.', 'pathlib', 'glob',
+        'signal.', 'threading.', 'multiprocessing.',
+        'ctypes.', 'platform.', 'inspect.',
+        'builtins.', 'warnings.', 'traceback.',
+        # Network and file operations
+        'socket', 'urllib', 'ftplib', 'smtplib',
+        'telnetlib', 'xmlrpc', 'http.server',
+        # Process control
+        'resource.', 'signal.', 'atexit.',
+        # Code generation/execution
+        'compile', 'exec', 'eval', 'execfile',
+        # System information
+        'platform.', 'pwd.', 'grp.', 'spwd.',
+        # Database access
+        'sqlite3', 'psycopg2', 'mysql', 'pymongo'
     ]
     
     # Additional pattern checks for obfuscation attempts
@@ -176,9 +198,9 @@ def execute_code_safely(code, context_data=None):
         
         # Set up security restrictions
         emit_progress('setting_up', 20, 'Setting up security restrictions')
-        set_memory_limit(128)
+        set_memory_limit(64)
         signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(15)  # 15 second timeout
+        signal.alarm(10)  # 10 second timeout
         
         # Create restricted execution environment
         emit_progress('preparing_environment', 30, 'Preparing execution environment')
@@ -277,17 +299,17 @@ def execute_code_safely(code, context_data=None):
         }
         
     except TimeoutError:
-        emit_status('failed', 'Code execution timed out (15 seconds)')
+        emit_status('failed', 'Code execution timed out (10 seconds)')
         return {
             'success': False,
-            'error': "Code execution timed out (15 seconds)",
+            'error': "Code execution timed out (10 seconds)",
             'execution_time': (time.time() - start_time) * 1000
         }
     except MemoryError:
-        emit_status('failed', 'Code execution exceeded memory limit (128MB)')
+        emit_status('failed', 'Code execution exceeded memory limit (64MB)')
         return {
             'success': False,
-            'error': "Code execution exceeded memory limit (128MB)",
+            'error': "Code execution exceeded memory limit (64MB)",
             'execution_time': (time.time() - start_time) * 1000
         }
     except Exception as e:
