@@ -13,7 +13,7 @@ sleep 2
 
 # Load environment variables from .env file
 if [ -f .env ]; then
-    export $(cat .env | grep -v '^#' | xargs)
+    export $(cat .env | grep -v '^#' | grep -v '^$' | xargs)
 fi
 
 # Set environment variables for HTTP mode

@@ -20,7 +20,7 @@ export class LocalInferenceService {
    * Check if a model is a local model
    */
   static isLocalModel(modelType) {
-    return modelType.startsWith('local/') || modelType.startsWith('cal/');
+    return modelType.startsWith('local/');
   }
 
   /**
@@ -54,30 +54,42 @@ export class LocalInferenceService {
 
       for (const modelDir of modelDirs) {
         const modelPath = path.join(modelsDir, modelDir);
-        const ggufFiles = fs.readdirSync(modelPath)
-          .filter(file => file.endsWith('.gguf'));
+        
+        try {
+          const ggufFiles = fs.readdirSync(modelPath)
+            .filter(file => file.endsWith('.gguf'))
+            .sort((a, b) => {
+              // Prefer files with 'instruct' in the name
+              if (a.includes('instruct') && !b.includes('instruct')) return -1;
+              if (!a.includes('instruct') && b.includes('instruct')) return 1;
+              return a.localeCompare(b);
+            });
 
-        if (ggufFiles.length > 0) {
-          const modelInfo = {
-            name: modelDir,
-            provider: 'local',
-            source: 'local',
-            modelPath: path.join(modelPath, ggufFiles[0]),
-            capabilities: ['chat', 'text-generation'],
-            isLocal: true
-          };
-          
-          // Add model with both local/ and cal/ prefixes
-          models.push({
-            id: `local/${modelDir}`,
-            ...modelInfo
-          });
-          models.push({
-            id: `cal/${modelDir}`,
-            ...modelInfo
-          });
-          
-          console.log(`📁 Found local model: ${modelDir} at ${modelInfo.modelPath}`);
+          if (ggufFiles.length > 0) {
+            const modelInfo = {
+              name: modelDir,
+              provider: 'local',
+              source: 'local',
+              modelPath: path.join(modelPath, ggufFiles[0]),
+              capabilities: ['chat', 'text-generation'],
+              isLocal: true,
+              ggufFile: ggufFiles[0],
+              alternativeGgufFiles: ggufFiles.slice(1) // Store other available files
+            };
+            
+            // Add model with local/ prefix only
+            models.push({
+              id: `local/${modelDir}`,
+              ...modelInfo
+            });
+            
+            console.log(`📁 Found local model: ${modelDir} at ${modelInfo.modelPath}`);
+            if (ggufFiles.length > 1) {
+              console.log(`📁 Alternative GGUF files: ${ggufFiles.slice(1).join(', ')}`);
+            }
+          }
+        } catch (error) {
+          console.error(`❌ Error reading model directory ${modelDir}:`, error.message);
         }
       }
 
@@ -118,7 +130,7 @@ export class LocalInferenceService {
    * Start a model server if not already running
    */
   async startModelServer(modelName) {
-    const cleanModelName = modelName.replace(/^(local|cal)\//, '');
+    const cleanModelName = modelName.replace(/^local\//, '');
     
     // Check if we have a pre-configured server for this model
     if (process.env.LOCAL_MODEL_NAME === cleanModelName && process.env.LOCAL_MODEL_URL) {
@@ -178,8 +190,10 @@ export class LocalInferenceService {
         '--port', port.toString(),
         '--host', '127.0.0.1',
         '-c', '4096', // Context length
-        '-ngl', '0', // Number of GPU layers (0 for CPU only)
-        '--log-disable' // Disable verbose logging
+        '-ngl', '999', // GPU layers (999 means use all available)
+        '--log-disable', // Disable verbose logging
+        '-fa', // Enable flash attention if available
+        '--parallel', '1' // Single request at a time for stability
       ], {
         stdio: ['ignore', 'pipe', 'pipe']
       });
@@ -190,13 +204,50 @@ export class LocalInferenceService {
           serverProcess.kill();
           reject(new Error(`Model server startup timeout for ${cleanModelName}`));
         }
-      }, 30000); // 30 second timeout
+      }, 60000); // 60 second timeout for better model loading
+
+      // Try to detect server readiness with HTTP health checks
+      const checkServerReady = async () => {
+        try {
+          const response = await fetch(`http://127.0.0.1:${port}/v1/models`, {
+            method: 'GET',
+            timeout: 5000
+          });
+          if (response.ok) {
+            serverReady = true;
+            clearTimeout(timeout);
+            this.runningServers.set(cleanModelName, serverProcess);
+            this.serverPorts.set(cleanModelName, port);
+            console.log(`Model server started for ${cleanModelName} on port ${port}`);
+            resolve(port);
+          }
+        } catch (error) {
+          // Server not ready yet, will retry
+        }
+      };
+
+      // Start checking server readiness after 5 seconds
+      setTimeout(() => {
+        const readinessInterval = setInterval(async () => {
+          if (serverReady) {
+            clearInterval(readinessInterval);
+            return;
+          }
+          await checkServerReady();
+        }, 2000); // Check every 2 seconds
+        
+        // Stop checking after timeout
+        setTimeout(() => clearInterval(readinessInterval), 55000);
+      }, 5000);
 
       serverProcess.stdout.on('data', (data) => {
         const output = data.toString();
         console.log(`[${cleanModelName}] ${output}`);
         
-        if (output.includes('HTTP server listening') || output.includes('listening on')) {
+        if (output.includes('HTTP server listening') || 
+            output.includes('listening on') || 
+            output.includes('server started') ||
+            output.includes('ready')) {
           serverReady = true;
           clearTimeout(timeout);
           this.runningServers.set(cleanModelName, serverProcess);
@@ -229,7 +280,7 @@ export class LocalInferenceService {
    */
   async processChat(modelType, prompt, imageData = null, systemPrompt = null, messages = []) {
     try {
-      const cleanModelName = modelType.replace(/^(local|cal)\//, '');
+      const cleanModelName = modelType.replace(/^local\//, '');
       const port = await this.startModelServer(modelType);
       
       // Build messages array for llama.cpp format
@@ -432,7 +483,7 @@ export class LocalInferenceService {
    */
   async streamChat(modelType, prompt, imageData = null, systemPrompt = null, writeCallback, messages = []) {
     try {
-      const cleanModelName = modelType.replace(/^(local|cal)\//, '');
+      const cleanModelName = modelType.replace(/^local\//, '');
       const port = await this.startModelServer(modelType);
       
       // Build messages array
@@ -572,7 +623,7 @@ export class LocalInferenceService {
    * Stop a model server
    */
   async stopModelServer(modelName) {
-    const cleanModelName = modelName.replace(/^(local|cal)\//, '');
+    const cleanModelName = modelName.replace(/^local\//, '');
     const serverProcess = this.runningServers.get(cleanModelName);
     
     if (serverProcess) {
