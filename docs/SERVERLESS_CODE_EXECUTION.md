@@ -13,6 +13,7 @@ The serverless code execution feature allows you to execute code blocks in multi
 - **Real-time Streaming**: Get execution progress via Server-Sent Events
 - **Secure Execution**: Code runs in isolated sandbox environments
 - **Error Handling**: Comprehensive error reporting and handling
+- **Direct Code Execution**: Execute code directly from AI response code blocks without predefined apps
 
 ## API Endpoints
 
@@ -133,16 +134,12 @@ Set these environment variables to configure the external API:
 ```bash
 # API Key for xenpac.org
 XENPAC_API_KEY=94b3df12696e8f3e672fd40c91dc6e52
-
-# App ID for xenpac.org
-XENPAC_APP_ID=6
 ```
 
 ### Default Values
 
 If environment variables are not set, the service uses these defaults:
 - **API Key**: `94b3df12696e8f3e672fd40c91dc6e52`
-- **App ID**: `6`
 - **Base URL**: `https://dev.xenpac.org/api`
 
 ## Usage Examples
@@ -291,16 +288,16 @@ The serverless code execution feature integrates seamlessly with the AI Portal's
 3. **Authentication**: Uses the same authentication middleware
 4. **Error Handling**: Consistent error response format
 5. **Documentation**: Integrated with the main API documentation
+6. **Direct Code Execution**: Execute code directly from AI response code blocks
 
 ## Troubleshooting
 
 ### Common Issues
 
 1. **"API key invalid"**: Check your `XENPAC_API_KEY` environment variable
-2. **"App ID not found"**: Verify your `XENPAC_APP_ID` environment variable
-3. **"Language not supported"**: Check the supported languages list
-4. **"Execution timeout"**: Code is taking too long to execute
-5. **"Stream connection failed"**: Network issues or server problems
+2. **"Language not supported"**: Check the supported languages list
+3. **"Execution timeout"**: Code is taking too long to execute
+4. **"Stream connection failed"**: Network issues or server problems
 
 ### Debug Mode
 
@@ -313,6 +310,21 @@ This feature integrates with the xenpac.org API:
 - **Base URL**: `https://dev.xenpac.org/api`
 - **Endpoint**: `/run`
 - **Authentication**: `x-api-key` header
-- **Format**: JSON with `appId`, `mainFile`, `language_id`, `variables`, and `code` fields
+- **Format**: JSON with `mainFile`, `language_id`, `variables`, and `files` array
+
+**Request Format:**
+```json
+{
+  "mainFile": "main.py",
+  "language_id": 71,
+  "variables": {},
+  "files": [
+    {
+      "name": "main.py",
+      "content": "print('Hello, World!')"
+    }
+  ]
+}
+```
 
 For more information about the external API, refer to the xenpac.org documentation.

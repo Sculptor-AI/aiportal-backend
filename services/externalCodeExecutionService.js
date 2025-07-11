@@ -3,7 +3,6 @@ import axios from 'axios';
 class ExternalCodeExecutionService {
     constructor() {
         this.apiKey = process.env.XENPAC_API_KEY || '94b3df12696e8f3e672fd40c91dc6e52';
-        this.appId = process.env.XENPAC_APP_ID || '6';
         this.baseUrl = 'https://dev.xenpac.org/api';
     }
 
@@ -32,11 +31,15 @@ class ExternalCodeExecutionService {
             const fileName = this.getFileName(language);
 
             const response = await axios.post(`${this.baseUrl}/run`, {
-                appId: this.appId,
                 mainFile: fileName,
                 language_id: languageId,
                 variables: {},
-                code: code
+                files: [
+                    {
+                        name: fileName,
+                        content: code
+                    }
+                ]
             }, {
                 headers: {
                     'Content-Type': 'application/json',
@@ -92,11 +95,15 @@ class ExternalCodeExecutionService {
             const fileName = this.getFileName(language);
 
             const response = await axios.post(`${this.baseUrl}/run`, {
-                appId: this.appId,
                 mainFile: fileName,
                 language_id: languageId,
                 variables: {},
-                code: code
+                files: [
+                    {
+                        name: fileName,
+                        content: code
+                    }
+                ]
             }, {
                 headers: {
                     'Content-Type': 'application/json',

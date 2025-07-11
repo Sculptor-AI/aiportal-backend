@@ -1,7 +1,7 @@
 import externalCodeExecutionService from './services/externalCodeExecutionService.js';
 
 async function testCodeExecution() {
-    console.log('🧪 Testing External Code Execution Service\n');
+    console.log('🧪 Testing External Code Execution Service (Updated for xenpac API v2)\n');
 
     // Test 1: Python code
     console.log('📝 Test 1: Python Code Execution');
@@ -75,6 +75,8 @@ console.log("Current timestamp:", Date.now());
     }
 
     console.log('\n🎉 Testing completed!');
+    console.log('\n📝 Note: This service now uses the xenpac API with files array instead of appId');
+    console.log('   for direct code execution from AI response code blocks.');
 }
 
 // Run the tests
