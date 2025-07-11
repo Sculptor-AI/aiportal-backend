@@ -1,18 +1,77 @@
 # Serverless Code Execution API
 
-This document describes the serverless code execution endpoints that allow frontend applications (like xenpac.org) to execute AI-generated code blocks without authentication.
+This document describes the serverless code execution feature that integrates with the external xenpac.org API to execute code in various programming languages.
 
 ## Overview
 
-The serverless code execution system integrates with external code execution APIs (like Judge0) to provide secure, sandboxed code execution for multiple programming languages. It's designed to be called directly from frontend applications without requiring user authentication.
+The serverless code execution feature allows you to execute code blocks in multiple programming languages without setting up local development environments. It uses the xenpac.org API for secure, sandboxed code execution.
 
-## Endpoints
+## Features
 
-### 1. Get Supported Languages
+- **Multi-language Support**: Python, JavaScript, TypeScript, Java, C++, C#, Go, Rust, PHP, Ruby, Swift, Kotlin, Scala, R, MATLAB
+- **Automatic Language Detection**: Detects programming language from code patterns
+- **Real-time Streaming**: Get execution progress via Server-Sent Events
+- **Secure Execution**: Code runs in isolated sandbox environments
+- **Error Handling**: Comprehensive error reporting and handling
 
-Get all supported programming languages for code execution.
+## API Endpoints
 
-**Endpoint:** `GET /api/v1/tools/languages`
+### 1. Execute Code
+
+**Endpoint:** `POST /api/execute-code`
+
+**Description:** Execute code and return results synchronously.
+
+**Request Body:**
+```json
+{
+  "code": "print('Hello, World!')",
+  "language": "python"  // Optional, auto-detected if not provided
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "result": "Hello, World!",
+  "output": "Hello, World!\n",
+  "error": null,
+  "executionTime": 0.123,
+  "language": "python"
+}
+```
+
+### 2. Execute Code with Streaming
+
+**Endpoint:** `POST /api/execute-code/stream`
+
+**Description:** Execute code with real-time progress updates via Server-Sent Events.
+
+**Request Body:**
+```json
+{
+  "code": "for i in range(5):\n    print(f'Step {i}')\n    import time\n    time.sleep(1)",
+  "language": "python"
+}
+```
+
+**SSE Events:**
+```
+data: {"type":"execution_started","language":"python","timestamp":1234567890}
+
+data: {"type":"execution_progress","output":"Step 0\n","timestamp":1234567891}
+
+data: {"type":"execution_progress","output":"Step 1\n","timestamp":1234567892}
+
+data: {"type":"execution_completed","timestamp":1234567895}
+```
+
+### 3. Get Supported Languages
+
+**Endpoint:** `GET /api/execute-code/languages`
+
+**Description:** Get list of supported programming languages.
 
 **Response:**
 ```json
@@ -20,410 +79,240 @@ Get all supported programming languages for code execution.
   "success": true,
   "languages": [
     {
-      "name": "python",
-      "id": 71,
-      "mainFile": "main.py"
+      "id": "python",
+      "name": "Python",
+      "extension": ".py"
     },
     {
-      "name": "javascript",
-      "id": 63,
-      "mainFile": "main.js"
-    },
-    {
-      "name": "java",
-      "id": 62,
-      "mainFile": "Main.java"
+      "id": "javascript",
+      "name": "JavaScript",
+      "extension": ".js"
     }
-  ],
-  "count": 100
+    // ... more languages
+  ]
 }
 ```
 
-### 2. Execute Code (Non-Streaming)
+## Supported Languages
 
-Execute code in any supported programming language and return the result immediately.
+| Language | ID | File Extension | Language ID |
+|----------|----|----------------|-------------|
+| Python | `python` | `.py` | 71 |
+| JavaScript | `javascript` | `.js` | 63 |
+| TypeScript | `typescript` | `.ts` | 74 |
+| Java | `java` | `.java` | 62 |
+| C++ | `cpp` | `.cpp` | 54 |
+| C# | `csharp` | `.cs` | 51 |
+| Go | `go` | `.go` | 60 |
+| Rust | `rust` | `.rs` | 73 |
+| PHP | `php` | `.php` | 68 |
+| Ruby | `ruby` | `.rb` | 72 |
+| Swift | `swift` | `.swift` | 83 |
+| Kotlin | `kotlin` | `.kt` | 78 |
+| Scala | `scala` | `.scala` | 81 |
+| R | `r` | `.r` | 80 |
+| MATLAB | `matlab` | `.m` | 58 |
 
-**Endpoint:** `POST /api/v1/tools/execute-code`
+## Language Detection
 
-**Request Body:**
-```json
-{
-  "code": "print('Hello, World!')\nresult = 2 + 2\nprint(f'Result: {result}')",
-  "language": "python",
-  "variables": {
-    "radius": 5,
-    "pi": 3.14159
-  },
-  "execution_id": "optional-custom-id"
-}
+The service automatically detects the programming language based on code patterns:
+
+- **Python**: `import`, `from`, `def`, `class`, `print(`, `if __name__`
+- **JavaScript**: `function`, `const`, `let`, `var`, `console.`, `import`, `export`
+- **TypeScript**: `interface`, `type`, `import`, `export`, `function`, `const`, `let`, `var`
+- **Java**: `public class`, `import java`, `System.out`, `public static void main`
+- **C++**: `#include`, `using namespace`, `int main`, `std::`, `cout <<`
+- And more...
+
+## Configuration
+
+### Environment Variables
+
+Set these environment variables to configure the external API:
+
+```bash
+# API Key for xenpac.org
+XENPAC_API_KEY=94b3df12696e8f3e672fd40c91dc6e52
+
+# App ID for xenpac.org
+XENPAC_APP_ID=6
 ```
 
-**Response:**
-```json
-{
-  "success": true,
-  "execution_id": "serverless_1703123456789_abc123def",
-  "result": {
-    "success": true,
-    "output": "Hello, World!\nResult: 4\n",
-    "execution_time": 45.67,
-    "result": 4
-  },
-  "execution_time": 67.89,
-  "timestamp": "2023-12-21T10:30:45.123Z"
-}
-```
+### Default Values
 
-### 3. Execute Code (Streaming)
+If environment variables are not set, the service uses these defaults:
+- **API Key**: `94b3df12696e8f3e672fd40c91dc6e52`
+- **App ID**: `6`
+- **Base URL**: `https://dev.xenpac.org/api`
 
-Execute code with real-time progress updates via Server-Sent Events.
+## Usage Examples
 
-**Endpoint:** `POST /api/v1/tools/execute-code/stream`
+### Python Example
 
-**Request Body:** Same as non-streaming endpoint
-
-**Stream Events:**
 ```javascript
-// Connection established
-data: {"type": "connected", "execution_id": "...", "message": "Serverless code execution stream connected"}
-
-// Execution started
-data: {"type": "execution_started", "execution_id": "...", "toolId": "code-execution"}
-
-// Progress update
-data: {"type": "execution_progress_structured", "execution_id": "...", "step": "executing", "percentage": 50, "message": "Processing data"}
-
-// Execution completed
-data: {"type": "execution_completed", "execution_id": "...", "result": {...}, "execution_time": 67.89}
-
-// Keep-alive ping
-data: {"type": "ping", "execution_id": "...", "timestamp": 1703123456789}
-```
-
-## Frontend Integration Examples
-
-### JavaScript/TypeScript
-
-#### Non-Streaming Execution
-```javascript
-async function executeCode(code, language = null, variables = {}) {
-  try {
-    const response = await fetch('https://api.sculptorai.org/api/v1/tools/execute-code', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        code: code,
-        language: language,
-        variables: variables
-      })
-    });
-
-    const result = await response.json();
-    
-    if (result.success) {
-      console.log('Code executed successfully:', result.result);
-      return result;
-    } else {
-      console.error('Code execution failed:', result.error);
-      throw new Error(result.error);
-    }
-  } catch (error) {
-    console.error('Request failed:', error);
-    throw error;
-  }
-}
-
-// Usage examples
-// Python
-executeCode(`
+const response = await fetch('/api/execute-code', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer YOUR_TOKEN'
+  },
+  body: JSON.stringify({
+    code: `
 import math
-radius = 5
-area = math.pi * radius ** 2
-print(f"Area of circle with radius {radius}: {area:.2f}")
-result = area
-`, 'python').then(result => {
-  console.log('Python execution result:', result);
-}).catch(error => {
-  console.error('Error:', error);
+print("Square root of 16:", math.sqrt(16))
+print("Pi:", math.pi)
+    `,
+    language: 'python'
+  })
 });
 
-// JavaScript
-executeCode(`
-const radius = 5;
-const area = Math.PI * radius ** 2;
-console.log(\`Area of circle with radius \${radius}: \${area.toFixed(2)}\`);
-result = area;
-`, 'javascript').then(result => {
-  console.log('JavaScript execution result:', result);
-}).catch(error => {
-  console.error('Error:', error);
-});
+const result = await response.json();
+console.log(result.output);
 ```
 
-#### Streaming Execution
+### JavaScript Example
+
 ```javascript
-function executeCodeStreaming(code, language = null, variables = {}, onProgress = null, onComplete = null, onError = null) {
-  const eventSource = new EventSource('/api/v1/tools/execute-code/stream', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      code: code,
-      language: language,
-      variables: variables
-    })
-  });
-
-  eventSource.onmessage = function(event) {
-    const data = JSON.parse(event.data);
-    
-    switch (data.type) {
-      case 'connected':
-        console.log('Connected to execution stream');
-        break;
-        
-      case 'execution_started':
-        console.log('Code execution started');
-        break;
-        
-      case 'execution_progress_structured':
-        if (onProgress) {
-          onProgress(data.percentage, data.message);
-        }
-        break;
-        
-      case 'execution_completed':
-        if (onComplete) {
-          onComplete(data.result);
-        }
-        eventSource.close();
-        break;
-        
-      case 'execution_failed':
-        if (onError) {
-          onError(data.error);
-        }
-        eventSource.close();
-        break;
-        
-      case 'ping':
-        // Keep-alive ping, ignore
-        break;
-    }
-  };
-
-  eventSource.onerror = function(error) {
-    console.error('EventSource error:', error);
-    if (onError) {
-      onError('Connection error');
-    }
-    eventSource.close();
-  };
-
-  return eventSource;
-}
-
-// Usage example
-executeCodeStreaming(
-  `
-import time
-for i in range(5):
-    print(f"Processing step {i+1}/5")
-    time.sleep(0.5)
-result = "Processing complete"
-  `,
-  'python',
-  {},
-  (percentage, message) => {
-    console.log(`Progress: ${percentage}% - ${message}`);
+const response = await fetch('/api/execute-code', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer YOUR_TOKEN'
   },
-  (result) => {
-    console.log('Execution completed:', result);
-  },
-  (error) => {
-    console.error('Execution failed:', error);
+  body: JSON.stringify({
+    code: `
+const numbers = [1, 2, 3, 4, 5];
+const sum = numbers.reduce((a, b) => a + b, 0);
+console.log('Sum:', sum);
+console.log('Average:', sum / numbers.length);
+    `,
+    language: 'javascript'
+  })
+});
+
+const result = await response.json();
+console.log(result.output);
+```
+
+### Streaming Example
+
+```javascript
+const eventSource = new EventSource('/api/execute-code/stream');
+
+eventSource.onmessage = function(event) {
+  const data = JSON.parse(event.data);
+  
+  switch(data.type) {
+    case 'execution_started':
+      console.log('Execution started for', data.language);
+      break;
+    case 'execution_progress':
+      console.log('Output:', data.output);
+      break;
+    case 'execution_completed':
+      console.log('Execution completed');
+      eventSource.close();
+      break;
+    case 'execution_error':
+      console.error('Error:', data.error);
+      eventSource.close();
+      break;
   }
-);
+};
+
+// Send the code to execute
+fetch('/api/execute-code/stream', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer YOUR_TOKEN'
+  },
+  body: JSON.stringify({
+    code: 'for i in range(3): print(f"Step {i}")',
+    language: 'python'
+  })
+});
 ```
 
-### React Component Example
+## Error Handling
 
-```jsx
-import React, { useState } from 'react';
+The API returns structured error responses:
 
-function CodeExecutor({ code, contextData }) {
-  const [isExecuting, setIsExecuting] = useState(false);
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState(null);
-  const [progress, setProgress] = useState(0);
-
-  const executeCode = async () => {
-    setIsExecuting(true);
-    setError(null);
-    setResult(null);
-    setProgress(0);
-
-    try {
-      const response = await fetch('/api/v1/tools/execute-code', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          code: code,
-          context_data: contextData
-        })
-      });
-
-      const data = await response.json();
-      
-      if (data.success) {
-        setResult(data.result);
-      } else {
-        setError(data.error);
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setIsExecuting(false);
-    }
-  };
-
-  return (
-    <div className="code-executor">
-      <button 
-        onClick={executeCode} 
-        disabled={isExecuting}
-        className="execute-button"
-      >
-        {isExecuting ? 'Executing...' : 'Execute Code'}
-      </button>
-      
-      {isExecuting && (
-        <div className="progress">
-          <div className="progress-bar" style={{ width: `${progress}%` }}></div>
-          <span>{progress}%</span>
-        </div>
-      )}
-      
-      {error && (
-        <div className="error">
-          <strong>Error:</strong> {error}
-        </div>
-      )}
-      
-      {result && (
-        <div className="result">
-          <h4>Execution Result:</h4>
-          <pre>{result.output}</pre>
-          {result.result && (
-            <div>
-              <strong>Return Value:</strong> {JSON.stringify(result.result)}
-            </div>
-          )}
-          <div className="execution-time">
-            Execution time: {result.execution_time}ms
-          </div>
-        </div>
-      )}
-    </div>
-  );
+```json
+{
+  "success": false,
+  "error": "Error message describing what went wrong"
 }
-
-export default CodeExecutor;
 ```
 
-## Supported Programming Languages
-
-The system supports 100+ programming languages including:
-
-### Popular Languages
-- **Python** (3.8.1) - ID: 71
-- **JavaScript** (Node.js 12.14.0) - ID: 63
-- **Java** (OpenJDK 13.0.1) - ID: 62
-- **C++** (GCC 9.2.0) - ID: 54
-- **C** (GCC 9.2.0) - ID: 50
-- **C#** (Mono 6.6.0.161) - ID: 51
-- **PHP** (7.4.1) - ID: 68
-- **Ruby** (2.7.0) - ID: 72
-- **Go** (1.13.5) - ID: 60
-- **Rust** (1.40.0) - ID: 73
-- **Swift** (5.2.3) - ID: 83
-- **Kotlin** (1.3.70) - ID: 78
-- **TypeScript** (3.7.4) - ID: 74
-
-### Specialized Languages
-- **R** (4.0.0) - ID: 80
-- **SQL** (SQLite 3.27.2) - ID: 82
-- **Bash** (5.0.0) - ID: 46
-- **Assembly** (NASM 2.14.02) - ID: 45
-- **Haskell** (GHC 8.8.1) - ID: 61
-- **Lua** (5.3.5) - ID: 64
-- **Perl** (5.28.1) - ID: 85
-- **Scala** (2.13.2) - ID: 81
-
-### Esoteric Languages
-- **Brainfuck** - ID: 44
-- **LOLCODE** - ID: 89
-- **Whitespace** - ID: 36
-- **Malbolge** - ID: 35
-- **Hexagony** - ID: 25
+Common error scenarios:
+- **Invalid code**: Syntax errors or runtime errors in the code
+- **Unsupported language**: Language not in the supported list
+- **API errors**: External API service issues
+- **Authentication errors**: Invalid or missing API key
+- **Timeout errors**: Code execution taking too long
 
 ## Security Features
 
 - **Sandboxed Execution**: Code runs in isolated environments
-- **Resource Limits**: Memory and execution time constraints
-- **Process Isolation**: Each execution runs in a separate container
-- **No Network Access**: Cannot make external network requests
-- **No File System Access**: Cannot read/write files outside sandbox
-
-## Limitations
-
-- **Code Length**: Maximum 10,000 characters
-- **Execution Time**: Varies by language (typically 5-15 seconds)
-- **Memory**: Varies by language (typically 128MB-512MB)
-- **No File Access**: Cannot read/write files outside sandbox
-- **No Network Access**: Cannot make external network requests
-- **No System Access**: Cannot access system resources
-- **Language-Specific**: Some languages may have additional restrictions
-
-## Error Handling
-
-Common error responses:
-
-```json
-{
-  "success": false,
-  "error": "Code parameter is required and must be a string",
-  "timestamp": "2023-12-21T10:30:45.123Z"
-}
-```
-
-```json
-{
-  "success": false,
-  "error": "Code length exceeds maximum limit of 10,000 characters",
-  "timestamp": "2023-12-21T10:30:45.123Z"
-}
-```
-
-```json
-{
-  "success": false,
-  "error": "Security validation failed: Import of 'os' module is not allowed",
-  "timestamp": "2023-12-21T10:30:45.123Z"
-}
-```
+- **Timeout Protection**: 30-second execution timeout
+- **Authentication Required**: All endpoints require valid authentication
+- **Input Validation**: Code and language parameters are validated
+- **Error Isolation**: Errors in one execution don't affect others
 
 ## Rate Limiting
 
-The serverless endpoints are subject to rate limiting to prevent abuse:
-- 20 requests per 5 minutes per IP address
-- Additional limits may apply based on server configuration
+The service respects rate limits from the external API. If you encounter rate limiting:
 
-## CORS Support
+1. Wait before making additional requests
+2. Consider using the streaming endpoint for long-running code
+3. Implement exponential backoff in your client code
 
-The endpoints support CORS and can be called from any origin, making them suitable for frontend integration. 
+## Testing
+
+Use the provided test script to verify the integration:
+
+```bash
+node test-external-code-execution.js
+```
+
+This will test:
+- Python and JavaScript code execution
+- Language detection
+- Supported languages listing
+- Error handling
+
+## Integration with AI Portal
+
+The serverless code execution feature integrates seamlessly with the AI Portal's existing tools system:
+
+1. **Tool Integration**: Can be used as a tool in AI model conversations
+2. **Streaming Support**: Real-time progress updates via SSE
+3. **Authentication**: Uses the same authentication middleware
+4. **Error Handling**: Consistent error response format
+5. **Documentation**: Integrated with the main API documentation
+
+## Troubleshooting
+
+### Common Issues
+
+1. **"API key invalid"**: Check your `XENPAC_API_KEY` environment variable
+2. **"App ID not found"**: Verify your `XENPAC_APP_ID` environment variable
+3. **"Language not supported"**: Check the supported languages list
+4. **"Execution timeout"**: Code is taking too long to execute
+5. **"Stream connection failed"**: Network issues or server problems
+
+### Debug Mode
+
+Enable debug logging by setting the log level in your application configuration.
+
+## External API Reference
+
+This feature integrates with the xenpac.org API:
+
+- **Base URL**: `https://dev.xenpac.org/api`
+- **Endpoint**: `/run`
+- **Authentication**: `x-api-key` header
+- **Format**: JSON with `appId`, `mainFile`, `language_id`, `variables`, and `code` fields
+
+For more information about the external API, refer to the xenpac.org documentation.
