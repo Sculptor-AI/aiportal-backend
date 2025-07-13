@@ -17,8 +17,8 @@ class LiveAudioService {
     
     // Rate limiting for DoS protection
     this.rateLimitMap = new Map(); // sessionId -> { count, lastReset }
-    this.MAX_REQUESTS_PER_MINUTE = 60;
-    this.MAX_CONCURRENT_SESSIONS = 10;
+    this.MAX_REQUESTS_PER_MINUTE = parseInt(process.env.LIVE_AUDIO_MAX_REQUESTS_PER_MINUTE) || 60;
+    this.MAX_CONCURRENT_SESSIONS = parseInt(process.env.LIVE_AUDIO_MAX_CONCURRENT_SESSIONS) || 10;
   }
 
   ensureAudioDirectory() {
@@ -136,6 +136,7 @@ class LiveAudioService {
         handleTurn,
         model,
         responseModality,
+        userId: options.userId, // Add user ID for session scoping
         startTime: new Date().toISOString(),
         status: 'active',
         ended: false
@@ -157,7 +158,7 @@ class LiveAudioService {
     }
   }
 
-  async processAudioChunk(sessionId, audioData, options = {}) {
+  async processAudioChunk(sessionId, audioData, options = {}, userId = null) {
     try {
       // Apply rate limiting
       this.checkRateLimit(sessionId);
@@ -165,6 +166,11 @@ class LiveAudioService {
       const sessionData = this.activeSessions.get(sessionId);
       if (!sessionData) {
         throw new Error(`Session ${sessionId} not found or expired`);
+      }
+
+      // Validate user ownership of session
+      if (userId && sessionData.userId !== userId) {
+        throw new Error(`Unauthorized access to session ${sessionId}`);
       }
 
       if (sessionData.ended) {
@@ -341,14 +347,27 @@ class LiveAudioService {
   // Sanitize filename to prevent path traversal
   sanitizeFilename(filename) {
     // Remove all characters except alphanumeric, hyphens, underscores, and dots
-    return filename.replace(/[^a-zA-Z0-9._-]/g, '');
+    // Also limit length to prevent extremely long filenames
+    const sanitized = filename.replace(/[^a-zA-Z0-9._-]/g, '');
+    return sanitized.substring(0, 100); // Limit to 100 characters
   }
 
   async saveAudioChunk(audioData, sessionId, format) {
     try {
+      // Input validation
+      if (!audioData || !sessionId || !format) {
+        throw new Error('Missing required parameters for audio saving');
+      }
+
       const timestamp = Date.now();
       const sanitizedSessionId = this.sanitizeFilename(sessionId);
       const sanitizedFormat = this.sanitizeFilename(format);
+      
+      // Ensure sanitized values aren't empty
+      if (!sanitizedSessionId || !sanitizedFormat) {
+        throw new Error('Invalid session ID or format after sanitization');
+      }
+      
       const filename = `audio_${sanitizedSessionId}_${timestamp}.${sanitizedFormat}`;
       const filepath = path.join(this.audioDir, filename);
 
@@ -360,22 +379,38 @@ class LiveAudioService {
         throw new Error('Invalid file path detected');
       }
 
+      // Validate filename doesn't contain any remaining path characters
+      if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+        throw new Error('Invalid filename detected after sanitization');
+      }
+
       // Convert base64 to buffer and save
       const buffer = Buffer.from(audioData, 'base64');
+      
+      // Additional size check for file system protection
+      if (buffer.length > 10 * 1024 * 1024) { // 10MB limit for individual files
+        throw new Error('Audio file too large to save (max 10MB)');
+      }
+      
       fs.writeFileSync(filepath, buffer);
 
       return filepath;
     } catch (error) {
       console.error('Error saving audio chunk:', error);
-      // Don't throw here - saving is optional
+      // Don't throw here - saving is optional for debugging purposes
     }
   }
 
-  async endSession(sessionId) {
+  async endSession(sessionId, userId = null) {
     try {
       const sessionData = this.activeSessions.get(sessionId);
       if (!sessionData) {
         throw new Error(`Session ${sessionId} not found`);
+      }
+
+      // Validate user ownership of session
+      if (userId && sessionData.userId !== userId) {
+        throw new Error(`Unauthorized access to session ${sessionId}`);
       }
 
       // Close the Gemini Live session
@@ -398,7 +433,7 @@ class LiveAudioService {
     }
   }
 
-  async getSessionStatus(sessionId) {
+  async getSessionStatus(sessionId, userId = null) {
     try {
       const sessionData = this.activeSessions.get(sessionId);
       if (!sessionData) {
@@ -407,6 +442,11 @@ class LiveAudioService {
           status: 'not_found',
           message: 'Session not found or expired'
         };
+      }
+
+      // Validate user ownership of session
+      if (userId && sessionData.userId !== userId) {
+        throw new Error(`Unauthorized access to session ${sessionId}`);
       }
 
       return {
@@ -433,13 +473,13 @@ class LiveAudioService {
       return {
         sessionId,
         sendAudioChunk: async (audioData, audioOptions) => {
-          return this.processAudioChunk(sessionId, audioData, audioOptions);
+          return this.processAudioChunk(sessionId, audioData, audioOptions, options.userId);
         },
         endSession: async () => {
-          return this.endSession(sessionId);
+          return this.endSession(sessionId, options.userId);
         },
         getStatus: async () => {
-          return this.getSessionStatus(sessionId);
+          return this.getSessionStatus(sessionId, options.userId);
         },
         ...sessionData
       };
@@ -450,16 +490,22 @@ class LiveAudioService {
     }
   }
 
-  // Get list of active sessions
-  getActiveSessions() {
+  // Get list of active sessions (filtered by user ID)
+  getActiveSessions(userId = null) {
     const sessions = [];
     for (const [sessionId, sessionData] of this.activeSessions) {
+      // If userId is provided, only return sessions for that user
+      if (userId && sessionData.userId !== userId) {
+        continue;
+      }
+      
       sessions.push({
         sessionId,
         status: sessionData.ended ? 'ended' : 'active',
         startTime: sessionData.startTime,
         model: sessionData.model,
-        responseModality: sessionData.responseModality
+        responseModality: sessionData.responseModality,
+        userId: sessionData.userId
       });
     }
     return sessions;

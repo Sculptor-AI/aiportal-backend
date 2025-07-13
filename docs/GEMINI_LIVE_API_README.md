@@ -113,6 +113,20 @@ X-API-Key: YOUR_API_KEY
 
 **URL**: `ws://localhost:3000/ws/live-audio` (or `wss://` for HTTPS)
 
+**🔐 Authentication Required**: All WebSocket connections must authenticate before use.
+
+#### Authentication
+
+Before sending any other messages, you must authenticate:
+
+```json
+{
+  "type": "auth",
+  "token": "your_api_key_here",
+  "type": "api_key"
+}
+```
+
 #### Message Types
 
 **Start Session**:
@@ -194,33 +208,70 @@ const audioResponse = await fetch('/api/v1/live-audio/transcribe', {
 #### WebSocket Streaming
 ```javascript
 const ws = new WebSocket('ws://localhost:3000/ws/live-audio');
+let isAuthenticated = false;
 
 ws.onopen = () => {
-  // Start session
+  // Authenticate first
   ws.send(JSON.stringify({
-    type: 'start_session',
-    session_id: 'streaming_session_123',
-    model: 'gemini-live-2.5-flash-preview',
-    response_modality: 'text'
+    type: 'auth',
+    token: 'your_api_key_here',
+    type: 'api_key'
   }));
 };
 
 ws.onmessage = (event) => {
   const data = JSON.parse(event.data);
   
-  if (data.type === 'transcription_result') {
-    console.log('Transcription:', data.data.transcript);
-    console.log('Input:', data.data.inputTranscription);
+  switch (data.type) {
+    case 'connected':
+      console.log('WebSocket connected, authentication required');
+      break;
+      
+    case 'auth_success':
+      console.log('Authentication successful');
+      isAuthenticated = true;
+      
+      // Now start session
+      ws.send(JSON.stringify({
+        type: 'start_session',
+        session_id: 'streaming_session_123',
+        model: 'gemini-live-2.5-flash-preview',
+        response_modality: 'text'
+      }));
+      break;
+      
+    case 'auth_failed':
+      console.error('Authentication failed:', data.error);
+      break;
+      
+    case 'rate_limit_exceeded':
+      console.error('Rate limit exceeded:', data.error);
+      break;
+      
+    case 'transcription_result':
+      console.log('Transcription:', data.data.transcript);
+      console.log('Input:', data.data.inputTranscription);
+      break;
+      
+    case 'session_started':
+      console.log('Session started:', data.session_id);
+      break;
   }
 };
 
-// Send audio chunk
-ws.send(JSON.stringify({
-  type: 'audio_chunk',
-  audio_data: base64AudioData,
-  format: 'webm',
-  sample_rate: 16000
-}));
+// Send audio chunk (only after authentication)
+function sendAudioChunk(base64AudioData) {
+  if (isAuthenticated) {
+    ws.send(JSON.stringify({
+      type: 'audio_chunk',
+      audio_data: base64AudioData,
+      format: 'webm',
+      sample_rate: 16000
+    }));
+  } else {
+    console.error('Not authenticated. Cannot send audio.');
+  }
+}
 ```
 
 #### Real-time Microphone Streaming
@@ -304,6 +355,38 @@ The implementation includes a comprehensive interactive documentation interface:
 - Sessions are cleaned up every 5 minutes automatically
 - Audio chunks are optionally saved for debugging
 
+## Security Features
+
+The implementation includes comprehensive security measures:
+
+### Authentication & Authorization
+- **WebSocket Authentication**: All WebSocket connections require authentication before use
+- **User Session Scoping**: Sessions are tied to authenticated users to prevent hijacking
+- **API Key Validation**: All endpoints validate API keys before processing requests
+
+### Rate Limiting
+- **Per-User Message Limits**: Maximum 120 messages per minute per user
+- **Per-IP Connection Limits**: Maximum 10 connections per minute per IP address
+- **Audio Data Limits**: Maximum 50MB of audio data per minute per user
+- **Connection Limits**: Maximum 5 concurrent connections per user
+
+### Path Protection
+- **File System Security**: Audio files are sanitized and restricted to designated directories
+- **Path Traversal Prevention**: All file operations are validated to prevent directory traversal attacks
+- **File Size Limits**: Individual audio files limited to 10MB, chunks limited to 5MB
+
+### Configuration
+All security limits can be configured via environment variables:
+```bash
+LIVE_AUDIO_MAX_REQUESTS_PER_MINUTE=60
+LIVE_AUDIO_MAX_CONCURRENT_SESSIONS=10
+LIVE_AUDIO_MAX_CONNECTIONS_PER_USER=5
+LIVE_AUDIO_AUTH_TIMEOUT_MS=30000
+LIVE_AUDIO_MAX_MESSAGES_PER_MINUTE=120
+LIVE_AUDIO_MAX_CONNECTIONS_PER_IP_PER_MINUTE=10
+LIVE_AUDIO_MAX_AUDIO_BYTES_PER_MINUTE=52428800
+```
+
 ## Error Handling
 
 The implementation includes comprehensive error handling:
@@ -313,6 +396,9 @@ The implementation includes comprehensive error handling:
 - Audio format conversion errors
 - Gemini API connection errors
 - WebSocket connection issues
+- Authentication failures
+- Rate limit violations
+- Path traversal attempts
 
 ## Testing
 

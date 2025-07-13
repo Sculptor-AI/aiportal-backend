@@ -6,6 +6,7 @@ let audioChunks = [];
 let isRecording = false;
 let wsConnection = null;
 let currentSessionId = null;
+let isWebSocketAuthenticated = false;
 
 // Initialize the app
 document.addEventListener('DOMContentLoaded', function() {
@@ -550,9 +551,21 @@ function connectWebSocket() {
     wsConnection = new WebSocket(wsUrl);
     
     wsConnection.onopen = function(event) {
-        console.log('WebSocket connected');
-        document.getElementById('recording-status').textContent = 'WebSocket connected. Ready to start streaming.';
-        document.getElementById('recording-status').style.color = 'green';
+        console.log('WebSocket connected, authenticating...');
+        document.getElementById('recording-status').textContent = 'WebSocket connected. Authenticating...';
+        document.getElementById('recording-status').style.color = 'orange';
+        
+        // Send authentication message
+        if (apiKey) {
+            wsConnection.send(JSON.stringify({
+                type: 'auth',
+                token: apiKey,
+                type: 'api_key'
+            }));
+        } else {
+            document.getElementById('recording-status').textContent = 'WebSocket connected but no API key provided.';
+            document.getElementById('recording-status').style.color = 'red';
+        }
     };
     
     wsConnection.onmessage = function(event) {
@@ -560,7 +573,34 @@ function connectWebSocket() {
         
         switch (data.type) {
             case 'connected':
-                console.log('WebSocket connection established');
+                console.log('WebSocket connection established, authentication required');
+                break;
+
+            case 'auth_success':
+                console.log('WebSocket authenticated successfully');
+                document.getElementById('recording-status').textContent = 'WebSocket authenticated. Ready to start streaming.';
+                document.getElementById('recording-status').style.color = 'green';
+                isWebSocketAuthenticated = true;
+                break;
+
+            case 'auth_failed':
+            case 'auth_timeout':
+                console.error('WebSocket authentication failed:', data.error);
+                document.getElementById('recording-status').textContent = `Authentication failed: ${data.error}`;
+                document.getElementById('recording-status').style.color = 'red';
+                isWebSocketAuthenticated = false;
+                break;
+
+            case 'auth_required':
+                console.error('Authentication required:', data.error);
+                document.getElementById('recording-status').textContent = 'Please authenticate first.';
+                document.getElementById('recording-status').style.color = 'red';
+                isWebSocketAuthenticated = false;
+                break;
+
+            case 'rate_limit_exceeded':
+                console.error('Rate limit exceeded:', data.error);
+                displayResponse('transcription-response', `Rate Limit: ${data.error}`, false);
                 break;
                 
             case 'session_started':
@@ -577,6 +617,16 @@ function connectWebSocket() {
                 console.log('Session ended:', data);
                 displayResponse('session-response', data, true);
                 break;
+
+            case 'session_status':
+                console.log('Session status:', data);
+                displayResponse('session-response', data, true);
+                break;
+
+            case 'rate_limit_status':
+                console.log('Rate limit status:', data);
+                displayResponse('transcription-response', `Rate Limits: ${JSON.stringify(data.data, null, 2)}`, true);
+                break;
                 
             case 'error':
                 console.error('WebSocket error:', data.error);
@@ -592,6 +642,7 @@ function connectWebSocket() {
         console.log('WebSocket connection closed');
         document.getElementById('recording-status').textContent = 'WebSocket disconnected.';
         document.getElementById('recording-status').style.color = 'red';
+        isWebSocketAuthenticated = false;
     };
     
     wsConnection.onerror = function(error) {
@@ -605,12 +656,19 @@ function startStreamingSession() {
     if (!wsConnection || wsConnection.readyState !== WebSocket.OPEN) {
         connectWebSocket();
         
-        // Wait for connection to open
+        // Wait for connection to open and authenticate
         setTimeout(() => {
-            if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
+            if (wsConnection && wsConnection.readyState === WebSocket.OPEN && isWebSocketAuthenticated) {
                 startStreamingSession();
+            } else if (wsConnection && wsConnection.readyState === WebSocket.OPEN && !isWebSocketAuthenticated) {
+                showNotification('WebSocket not authenticated. Please check your API key.');
             }
-        }, 1000);
+        }, 2000); // Increased timeout for authentication
+        return;
+    }
+
+    if (!isWebSocketAuthenticated) {
+        showNotification('WebSocket not authenticated. Please connect and authenticate first.');
         return;
     }
     
