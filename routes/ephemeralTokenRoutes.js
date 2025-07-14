@@ -1,6 +1,6 @@
 import express from 'express';
 import { protect } from '../middleware/authMiddleware.js';
-import { rateLimitMiddleware } from '../middleware/rateLimitMiddleware.js';
+import rateLimit from 'express-rate-limit';
 import liveApiSecurityMiddleware from '../middleware/liveApiSecurityMiddleware.js';
 import {
   generateToken,
@@ -19,7 +19,7 @@ router.use(protect);
 router.use(liveApiSecurityMiddleware.securityCheck);
 
 // Rate limiting middleware for token generation
-const tokenRateLimit = rateLimitMiddleware({
+const tokenRateLimit = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 15, // 15 requests per hour per user
   message: 'Too many token requests, please try again later',
