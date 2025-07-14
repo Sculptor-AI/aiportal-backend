@@ -1,3 +1,6 @@
+// DEPRECATED: This entire route file is deprecated in favor of ephemeral token approach
+// Use /api/v1/live-token instead for new Live API access
+
 import express from 'express';
 import { 
   handleTranscription, 

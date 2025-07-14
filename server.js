@@ -16,6 +16,7 @@ import customModelRoutes from './routes/customModelRoutes.js';
 import usageRoutes from './routes/usageRoutes.js';
 import rateLimitRoutes from './routes/rateLimitRoutes.js';
 import liveAudioRoutes from './routes/liveAudioRoutes.js';
+import ephemeralTokenRoutes from './routes/ephemeralTokenRoutes.js';
 import toolsRoutes from './routes/toolsRoutes.js';
 import adminRoutes from './admin/adminRoutes.js';
 import { setupAdmin } from './admin/setup.js';
@@ -171,7 +172,8 @@ app.use('/api/v1/chat', routerboxRoutes); // Main Routerbox endpoint
 app.use('/api/v1/custom-models', customModelRoutes); // Custom model management
 app.use('/api/v1/usage', usageRoutes); // Usage statistics
 app.use('/api/v1/rate-limits', rateLimitRoutes); // Rate limit management
-app.use('/api/v1/live-audio', liveAudioRoutes); // Live audio transcription
+app.use('/api/v1/live-audio', liveAudioRoutes); // Live audio transcription (deprecated)
+app.use('/api/v1/live-token', ephemeralTokenRoutes); // Ephemeral tokens for Live API
 app.use('/api/v1/tools', toolsRoutes); // Tools management and execution
 app.use('/api', apiRouter);
 app.use('/api/v1/images', imageGenerationRoutes);

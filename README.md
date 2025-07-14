@@ -27,6 +27,7 @@ curl -X POST http://YOUR_IP:3000/api/v1/chat/completions \
 - **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Common issues and solutions
 - **[docs/TOOLS_SYSTEM.md](docs/TOOLS_SYSTEM.md)** - Tools system documentation
 - **[docs/TOOLS_API.md](docs/TOOLS_API.md)** - Tools API reference
+- **[docs/LIVE_API_V2.md](docs/LIVE_API_V2.md)** - Live API v2 with ephemeral tokens
 
 ## 🔧 Key Features
 
@@ -36,6 +37,7 @@ curl -X POST http://YOUR_IP:3000/api/v1/chat/completions \
 - **Streaming-First** - All APIs now default to streaming responses
 - **Latest Models** - Includes 2024-2025's best models (Llama 4, Claude 3.7, o3)
 - **Custom Models** - Create GPT-like custom assistants
+- **Live API v2** - Ephemeral token-based real-time conversation with Gemini
 - **Network Access** - Use from any device on your network
 - **Rate Limiting** - Per-user, per-model limits
 - **Authentication** - JWT + API key dual system

@@ -5,6 +5,8 @@ import { createErrorResponse, logError, handleWebSocketError } from '../utils/er
 
 export const startSession = async (req, res) => {
   try {
+    // DEPRECATED WARNING
+    console.warn('⚠️  DEPRECATED: /api/v1/live-audio/session/start is deprecated. Use /api/v1/live-token for ephemeral token access.');
     const { 
       session_id, 
       model = 'gemini-live-2.5-flash-preview',
