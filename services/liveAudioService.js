@@ -94,6 +94,8 @@ class LiveAudioService {
           onclose: (event) => {
             console.log(`🎙️ Live session ${sessionId} closed:`, event.reason);
             sessionEnded = true;
+            // Clean up session immediately on connection close
+            this.activeSessions.delete(sessionId);
           }
         },
         config: config

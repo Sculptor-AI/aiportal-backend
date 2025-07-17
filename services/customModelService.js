@@ -1,5 +1,6 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
+import chokidar from 'chokidar';
 import { fileURLToPath } from 'url';
 import { RouterboxService } from './routerboxService.js';
 import { RateLimitingService } from './rateLimitingService.js';
@@ -9,22 +10,35 @@ const __dirname = path.dirname(__filename);
 
 export class CustomModelService {
   static customModelsPath = path.join(__dirname, '..', 'custom-models');
+  static modelsCache = new Map();
+  static watcher = null;
+  static initialized = false;
+
+  static async initialize() {
+    if (this.initialized) return;
+    
+    await this.loadCustomModels();
+    this.setupFileWatcher();
+    this.initialized = true;
+    
+    console.log(`✅ Custom model service initialized with ${this.modelsCache.size} models`);
+  }
 
   static async loadCustomModels() {
     try {
-      const files = fs.readdirSync(this.customModelsPath);
-      const models = [];
+      const files = await fs.readdir(this.customModelsPath);
+      this.modelsCache.clear();
 
       for (const file of files) {
         if (file.endsWith('.json')) {
           try {
             const filePath = path.join(this.customModelsPath, file);
-            const content = fs.readFileSync(filePath, 'utf-8');
+            const content = await fs.readFile(filePath, 'utf-8');
             const model = JSON.parse(content);
             
             // Validate model structure
             if (this.validateModel(model)) {
-              models.push(model);
+              this.modelsCache.set(model.id, model);
             } else {
               console.warn(`Invalid custom model structure in ${file}`);
             }
@@ -34,10 +48,66 @@ export class CustomModelService {
         }
       }
 
-      return models;
+      return Array.from(this.modelsCache.values());
     } catch (error) {
       console.error('Error loading custom models:', error);
       return [];
+    }
+  }
+
+  static setupFileWatcher() {
+    if (this.watcher) return;
+    
+    this.watcher = chokidar.watch(this.customModelsPath, {
+      ignored: /^\./, // ignore dotfiles
+      persistent: true,
+      ignoreInitial: true
+    });
+
+    this.watcher.on('change', (filepath) => {
+      console.log(`🔄 Custom model file changed: ${filepath}`);
+      this.reloadModelFile(filepath);
+    });
+
+    this.watcher.on('add', (filepath) => {
+      console.log(`➕ Custom model file added: ${filepath}`);
+      this.reloadModelFile(filepath);
+    });
+
+    this.watcher.on('unlink', (filepath) => {
+      console.log(`➖ Custom model file removed: ${filepath}`);
+      this.removeModelFromCache(filepath);
+    });
+  }
+
+  static async reloadModelFile(filepath) {
+    if (!filepath.endsWith('.json')) return;
+    
+    try {
+      const content = await fs.readFile(filepath, 'utf-8');
+      const model = JSON.parse(content);
+      
+      if (this.validateModel(model)) {
+        this.modelsCache.set(model.id, model);
+        console.log(`✅ Reloaded custom model: ${model.id}`);
+      } else {
+        console.warn(`❌ Invalid custom model structure in ${filepath}`);
+      }
+    } catch (error) {
+      console.error(`❌ Error reloading custom model ${filepath}:`, error);
+    }
+  }
+
+  static removeModelFromCache(filepath) {
+    const filename = path.basename(filepath, '.json');
+    // Find and remove the model by checking all cached models
+    for (const [id, model] of this.modelsCache.entries()) {
+      const modelFilename = this.sanitizeFilename(id.replace('custom/', ''));
+      if (modelFilename === filename) {
+        this.modelsCache.delete(id);
+        console.log(`🗑️ Removed custom model from cache: ${id}`);
+        break;
+      }
     }
   }
 
@@ -51,13 +121,13 @@ export class CustomModelService {
   }
 
   static async getCustomModel(modelId) {
-    const models = await this.loadCustomModels();
-    return models.find(model => model.id === modelId);
+    if (!this.initialized) await this.initialize();
+    return this.modelsCache.get(modelId);
   }
 
   static async getAllCustomModels() {
-    const models = await this.loadCustomModels();
-    return models.filter(model => model.is_active !== false);
+    if (!this.initialized) await this.initialize();
+    return Array.from(this.modelsCache.values()).filter(model => model.is_active !== false);
   }
 
   static isCustomModel(modelId) {
@@ -182,7 +252,10 @@ export class CustomModelService {
       throw new Error('Invalid model ID: path traversal detected');
     }
     
-    fs.writeFileSync(filePath, JSON.stringify(modelData, null, 2));
+    await fs.writeFile(filePath, JSON.stringify(modelData, null, 2));
+    
+    // Update cache immediately
+    this.modelsCache.set(modelData.id, modelData);
     
     return modelData;
   }
@@ -215,7 +288,10 @@ export class CustomModelService {
       throw new Error('Invalid model ID: path traversal detected');
     }
     
-    fs.writeFileSync(filePath, JSON.stringify(updatedModel, null, 2));
+    await fs.writeFile(filePath, JSON.stringify(updatedModel, null, 2));
+    
+    // Update cache immediately
+    this.modelsCache.set(modelId, updatedModel);
     
     return updatedModel;
   }

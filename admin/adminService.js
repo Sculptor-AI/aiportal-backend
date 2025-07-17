@@ -95,6 +95,13 @@ export class AdminService {
     );
   }
 
+  static async revokeAllAdminTokensForUser(userId) {
+    await database.run(
+      'UPDATE admin_tokens SET is_revoked = 1 WHERE user_id = ? AND is_revoked = 0',
+      [userId]
+    );
+  }
+
   static async getAllUsers() {
     return await database.query(`
       SELECT 
@@ -111,19 +118,39 @@ export class AdminService {
     `);
   }
 
-  static async updateUserStatus(userId, newStatus) {
+  static async updateUserStatus(userId, newStatus, adminUserId) {
     const validStatuses = ['pending', 'active', 'admin'];
     if (!validStatuses.includes(newStatus)) {
       throw new Error('Invalid status');
     }
 
     // Check if user exists
-    const user = await database.get('SELECT id FROM users WHERE id = ? AND is_active = 1', [userId]);
+    const user = await database.get('SELECT id, status FROM users WHERE id = ? AND is_active = 1', [userId]);
     if (!user) {
       throw new Error('User not found');
     }
 
+    // Prevent admins from changing their own status
+    if (userId === adminUserId) {
+      throw new Error('Cannot change your own admin status');
+    }
+
+    // If promoting to admin or demoting an admin, verify the requesting admin has appropriate permissions
+    if (newStatus === 'admin' || user.status === 'admin') {
+      // For now, any admin can promote/demote others (but not themselves)
+      // In the future, you could add a super-admin role for this
+      if (!await this.isUserAdmin(adminUserId)) {
+        throw new Error('Insufficient privileges to change admin status');
+      }
+    }
+
+    const oldStatus = user.status;
     await database.run('UPDATE users SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [newStatus, userId]);
+
+    // If demoting from admin, revoke all admin tokens for that user
+    if (oldStatus === 'admin' && newStatus !== 'admin') {
+      await this.revokeAllAdminTokensForUser(userId);
+    }
   }
 
   static async updateUserDetails(userId, updates) {

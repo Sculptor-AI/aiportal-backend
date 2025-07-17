@@ -104,7 +104,7 @@ export class AuthService {
     );
 
     if (existingUser) {
-      throw new Error('Username or email already exists');
+      throw new Error('Registration failed. Please try a different username or email.');
     }
 
     const passwordHash = await this.hashPassword(password);

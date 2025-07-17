@@ -311,7 +311,7 @@ router.put('/users/:userId/status', requireAdmin, validateInput.userId, validate
       });
     }
 
-    await AdminService.updateUserStatus(userId, status);
+    await AdminService.updateUserStatus(userId, status, req.adminUser.user_id);
 
     res.json({
       success: true,

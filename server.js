@@ -24,6 +24,7 @@ import database from './database/connection.js';
 import modelConfigService from './services/modelConfigService.js';
 import rateLimitQueueService from './services/rateLimitQueueService.js';
 import toolsService from './services/toolsService.js';
+import { CustomModelService } from './services/customModelService.js';
 import { handleWebSocketConnection, cleanupExpiredSessions } from './controllers/liveAudioController.js';
 import crypto from 'crypto';
 
@@ -218,6 +219,10 @@ async function startServer() {
     // Initialize tools service
     console.log('🔧 Initializing tools service...');
     await toolsService.initialize();
+    
+    // Initialize custom model service
+    console.log('🎨 Initializing custom model service...');
+    await CustomModelService.initialize();
     
     // Setup admin system
     console.log('👤 Setting up admin system...');
