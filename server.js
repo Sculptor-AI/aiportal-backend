@@ -57,7 +57,7 @@ const corsOptions = {
     }
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token', 'X-API-Key'],
   exposedHeaders: ['Content-Range', 'X-Content-Range'],
   credentials: true,
   preflightContinue: false,
@@ -70,8 +70,9 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrcAttr: ["'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", "wss:", "ws:", "https:"],
       fontSrc: ["'self'", "data:", "https:"],
@@ -116,7 +117,7 @@ app.use((req, res, next) => {
   }
   
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token, X-API-Key');
   res.header('Access-Control-Expose-Headers', 'Content-Range, X-Content-Range');
   res.header('Access-Control-Allow-Credentials', 'true');
   
@@ -326,27 +327,49 @@ async function startServer() {
     });
 
     // Graceful shutdown
-    process.on('SIGINT', () => {
+    let shutdownInProgress = false;
+    const gracefulShutdown = async () => {
+      if (shutdownInProgress) {
+        console.log('🛑 Shutdown already in progress...');
+        return;
+      }
+      shutdownInProgress = true;
+      
       console.log('\n🛑 Shutting down gracefully...');
-      server.close(async () => {
-        await modelConfigService.shutdown();
-        await rateLimitQueueService.shutdown();
-        await toolsService.shutdown();
-        database.close();
-        process.exit(0);
-      });
-    });
+      
+      // Set a timeout for forceful shutdown
+      const forceShutdownTimeout = setTimeout(() => {
+        console.log('⚠️ Forced shutdown after timeout');
+        process.exit(1);
+      }, 5000); // 5 second timeout
+      
+      try {
+        server.close(async () => {
+          try {
+            await Promise.all([
+              modelConfigService.shutdown(),
+              rateLimitQueueService.shutdown(),
+              toolsService.shutdown()
+            ]);
+            database.close();
+            clearTimeout(forceShutdownTimeout);
+            console.log('✅ Graceful shutdown complete');
+            process.exit(0);
+          } catch (error) {
+            console.error('❌ Error during shutdown:', error);
+            clearTimeout(forceShutdownTimeout);
+            process.exit(1);
+          }
+        });
+      } catch (error) {
+        console.error('❌ Error closing server:', error);
+        clearTimeout(forceShutdownTimeout);
+        process.exit(1);
+      }
+    };
 
-    process.on('SIGTERM', () => {
-      console.log('\n🛑 Shutting down gracefully...');
-      server.close(async () => {
-        await modelConfigService.shutdown();
-        await rateLimitQueueService.shutdown();
-        await toolsService.shutdown();
-        database.close();
-        process.exit(0);
-      });
-    });
+    process.on('SIGINT', gracefulShutdown);
+    process.on('SIGTERM', gracefulShutdown);
 
   } catch (error) {
     console.error('Failed to start server:', error);
