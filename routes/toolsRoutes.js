@@ -1,8 +1,166 @@
 import express from 'express';
 import toolsService from '../services/toolsService.js';
+import externalCodeExecutionService from '../services/externalCodeExecutionService.js';
 import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+
+// Serverless code execution endpoint for frontend integration
+// This endpoint allows code execution without authentication for AI-generated code blocks
+router.post('/execute-code', async (req, res) => {
+    try {
+        const { code, language, variables, execution_id } = req.body;
+        
+        // Validate required parameters
+        if (!code || typeof code !== 'string') {
+            return res.status(400).json({
+                success: false,
+                error: 'Code parameter is required and must be a string'
+            });
+        }
+
+        // Validate code length
+        if (code.length > 10000) {
+            return res.status(400).json({
+                success: false,
+                error: 'Code length exceeds maximum limit of 10,000 characters'
+            });
+        }
+
+        // Generate execution ID if not provided
+        const finalExecutionId = execution_id || `serverless_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+        // Execute the code using external API
+        const result = await externalCodeExecutionService.executeCode(code, language, variables || {});
+        
+        // Return the result with the execution ID
+        res.json({
+            success: true,
+            execution_id: finalExecutionId,
+            result: result,
+            execution_time: result.execution_time,
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error) {
+        console.error('Serverless code execution error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
+// Streaming serverless code execution endpoint for real-time progress
+router.post('/execute-code/stream', async (req, res) => {
+    try {
+        const { code, language, variables, execution_id } = req.body;
+        
+        // Validate required parameters
+        if (!code || typeof code !== 'string') {
+            return res.status(400).json({
+                success: false,
+                error: 'Code parameter is required and must be a string'
+            });
+        }
+
+        // Validate code length
+        if (code.length > 10000) {
+            return res.status(400).json({
+                success: false,
+                error: 'Code length exceeds maximum limit of 10,000 characters'
+            });
+        }
+
+        // Generate execution ID if not provided
+        const finalExecutionId = execution_id || `serverless_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+        // Set up SSE headers
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Cache-Control'
+        });
+
+        // Send initial connection message
+        res.write(`data: ${JSON.stringify({ 
+            type: 'connected', 
+            execution_id: finalExecutionId,
+            message: 'Serverless code execution stream connected' 
+        })}\n\n`);
+
+        // Send execution started event
+        res.write(`data: ${JSON.stringify({
+            type: 'execution_started',
+            execution_id: finalExecutionId,
+            message: 'Code execution started'
+        })}\n\n`);
+
+        try {
+            // Execute the code using external API
+            const result = await externalCodeExecutionService.executeCode(code, language, variables || {});
+            
+            // Send final completion event
+            res.write(`data: ${JSON.stringify({
+                type: 'execution_completed',
+                execution_id: finalExecutionId,
+                result: result,
+                execution_time: result.execution_time,
+                timestamp: new Date().toISOString()
+            })}\n\n`);
+            
+        } catch (error) {
+            // Send error event
+            res.write(`data: ${JSON.stringify({
+                type: 'execution_failed',
+                execution_id: finalExecutionId,
+                error: error.message,
+                timestamp: new Date().toISOString()
+            })}\n\n`);
+        }
+
+        // Keep connection alive
+        const keepAlive = setInterval(() => {
+            res.write(`data: ${JSON.stringify({ 
+                type: 'ping', 
+                execution_id: finalExecutionId,
+                timestamp: Date.now() 
+            })}\n\n`);
+        }, 30000);
+
+        req.on('close', () => {
+            clearInterval(keepAlive);
+        });
+
+    } catch (error) {
+        console.error('Streaming serverless code execution error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
+// Get supported programming languages for code execution
+router.get('/languages', async (req, res) => {
+    try {
+        const languages = externalCodeExecutionService.getSupportedLanguages();
+        res.json({
+            success: true,
+            languages,
+            count: languages.length
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
 
 // Get all available tools
 router.get('/tools', protect, async (req, res) => {
@@ -182,6 +340,150 @@ router.get('/executions/stream', protect, async (req, res) => {
     req.on('close', () => {
         clearInterval(keepAlive);
     });
+});
+
+// ===== SERVERLESS CODE EXECUTION ENDPOINTS =====
+
+// Execute code serverlessly
+router.post('/execute-code', protect, async (req, res) => {
+    try {
+        const { code, language } = req.body;
+        
+        if (!code) {
+            return res.status(400).json({
+                success: false,
+                error: 'Code is required'
+            });
+        }
+
+        // Auto-detect language if not provided
+        const detectedLanguage = language || externalCodeExecutionService.detectLanguage(code);
+        
+        const result = await externalCodeExecutionService.executeCode(code, detectedLanguage);
+        
+        res.json({
+            success: result.success,
+            result: result.result,
+            output: result.output,
+            error: result.error,
+            executionTime: result.executionTime,
+            language: result.language
+        });
+    } catch (error) {
+        console.error('Code execution error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Execute code with streaming
+router.post('/execute-code/stream', protect, async (req, res) => {
+    try {
+        const { code, language } = req.body;
+        
+        if (!code) {
+            return res.status(400).json({
+                success: false,
+                error: 'Code is required'
+            });
+        }
+
+        // Auto-detect language if not provided
+        const detectedLanguage = language || externalCodeExecutionService.detectLanguage(code);
+        
+        const result = await externalCodeExecutionService.executeCodeStream(code, detectedLanguage);
+        
+        if (!result.success) {
+            return res.status(500).json({
+                success: false,
+                error: result.error
+            });
+        }
+
+        // Set up SSE headers
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Cache-Control'
+        });
+
+        // Send initial message
+        res.write(`data: ${JSON.stringify({ 
+            type: 'execution_started', 
+            language: result.language,
+            timestamp: Date.now() 
+        })}\n\n`);
+
+        // Stream the response
+        result.stream.on('data', (chunk) => {
+            try {
+                const data = JSON.parse(chunk.toString());
+                res.write(`data: ${JSON.stringify({ 
+                    type: 'execution_progress', 
+                    ...data,
+                    timestamp: Date.now() 
+                })}\n\n`);
+            } catch (error) {
+                // Send raw chunk if not JSON
+                res.write(`data: ${JSON.stringify({ 
+                    type: 'execution_output', 
+                    output: chunk.toString(),
+                    timestamp: Date.now() 
+                })}\n\n`);
+            }
+        });
+
+        result.stream.on('end', () => {
+            res.write(`data: ${JSON.stringify({ 
+                type: 'execution_completed', 
+                timestamp: Date.now() 
+            })}\n\n`);
+            res.end();
+        });
+
+        result.stream.on('error', (error) => {
+            res.write(`data: ${JSON.stringify({ 
+                type: 'execution_error', 
+                error: error.message,
+                timestamp: Date.now() 
+            })}\n\n`);
+            res.end();
+        });
+
+        // Handle client disconnect
+        req.on('close', () => {
+            if (result.stream) {
+                result.stream.destroy();
+            }
+        });
+
+    } catch (error) {
+        console.error('Code execution stream error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Get supported languages
+router.get('/execute-code/languages', protect, async (req, res) => {
+    try {
+        const languages = externalCodeExecutionService.getSupportedLanguages();
+        res.json({
+            success: true,
+            languages
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
 });
 
 export default router;
